@@ -199,3 +199,70 @@ ON CONFLICT (id) DO UPDATE SET
   booking_cutoff_at = EXCLUDED.booking_cutoff_at;
 
 SELECT setval('booking.shuttle_trips_id_seq', (SELECT MAX(id) FROM booking.shuttle_trips));
+
+-- ============================================================================
+-- 9. Seed Core Trips & Trip Participants (for Real-time Tracking and Safety)
+-- ============================================================================
+INSERT INTO core.trips (id, kind, company_id, driver_user_id, status, planned_start)
+VALUES
+  (1, 'shuttle', 1, 2, 'in_progress', now() - interval '20 minutes'),
+  (2, 'carpool', 1, 3, 'in_progress', now() - interval '10 minutes')
+ON CONFLICT (id) DO UPDATE SET
+  kind = EXCLUDED.kind,
+  company_id = EXCLUDED.company_id,
+  driver_user_id = EXCLUDED.driver_user_id,
+  status = EXCLUDED.status;
+
+SELECT setval('core.trips_id_seq', (SELECT MAX(id) FROM core.trips));
+
+INSERT INTO core.trip_participants (trip_id, user_id, role)
+VALUES
+  (1, 2, 'driver'),
+  (1, 5, 'rider'),
+  (1, 6, 'rider'),
+  (2, 3, 'driver'),
+  (2, 7, 'rider')
+ON CONFLICT (trip_id, user_id) DO NOTHING;
+
+-- ============================================================================
+-- 10. Seed Safety Route Boundaries (Kaduwela Express corridor polyline)
+-- ============================================================================
+INSERT INTO safety.route_boundaries (trip_id, geom, mild_threshold_m, severe_threshold_m)
+VALUES
+  (1, ST_GeomFromText('LINESTRING(79.9832 6.9319, 79.9547 6.9042, 79.9234 6.8996, 79.8967 6.9085, 79.8428 6.9344)', 4326), 250, 1000),
+  (2, ST_GeomFromText('LINESTRING(79.8816 6.7731, 79.8732 6.8219, 79.8656 6.8378, 79.8557 6.8914, 79.8428 6.9344)', 4326), 250, 1000)
+ON CONFLICT (trip_id) DO UPDATE SET
+  geom = EXCLUDED.geom,
+  mild_threshold_m = EXCLUDED.mild_threshold_m,
+  severe_threshold_m = EXCLUDED.severe_threshold_m;
+
+-- ============================================================================
+-- 11. Seed Safety Verified Corporate Users & Preferences
+-- ============================================================================
+INSERT INTO safety.verified_users (user_id, corporate_email, verified_at)
+VALUES
+  (1,  'admin@syscolabs.com',       now() - interval '30 days'),
+  (2,  'driver1@syscolabs.com',     now() - interval '25 days'),
+  (3,  'driver2@syscolabs.com',     now() - interval '20 days'),
+  (5,  'emp1@syscolabs.com',        now() - interval '14 days'),
+  (6,  'emp2@syscolabs.com',        now() - interval '10 days'),
+  (7,  'emp3@syscolabs.com',        now() - interval '8 days')
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO safety.safety_preferences (user_id, women_only, emergency_contact_name, emergency_contact_phone, emergency_contact_email)
+VALUES
+  (5, false, 'Nimal Wijesinghe', '+94771234567', 'nimal.w@gmail.com'),
+  (6, false, 'Malkanthi Ranasinghe', '+94719876543', 'malkanthi.r@gmail.com'),
+  (7, true,  'Priyantha Wickramasinghe', '+94705551234', 'priyantha.w@gmail.com')
+ON CONFLICT (user_id) DO NOTHING;
+
+-- ============================================================================
+-- 12. Seed Initial Live Tracking Points (Trip 1 & Trip 2)
+-- ============================================================================
+INSERT INTO safety.tracking_points (trip_id, user_id, geom, speed_mps, heading, accuracy_m, recorded_at)
+VALUES
+  (1, 2, ST_SetSRID(ST_MakePoint(79.9545, 6.9041), 4326), 11.4, 260.0, 4.2, now() - interval '2 minutes'),
+  (1, 2, ST_SetSRID(ST_MakePoint(79.9412, 6.9015), 4326), 12.8, 265.0, 3.8, now() - interval '1 minute'),
+  (1, 2, ST_SetSRID(ST_MakePoint(79.9235, 6.8997), 4326), 10.5, 270.0, 4.0, now()),
+  (2, 3, ST_SetSRID(ST_MakePoint(79.8730, 6.8220), 4326), 14.1, 350.0, 5.1, now() - interval '1 minute'),
+  (2, 3, ST_SetSRID(ST_MakePoint(79.8658, 6.8380), 4326), 13.5, 348.0, 4.9, now());
