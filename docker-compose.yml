@@ -1,0 +1,23 @@
+services:
+  postgis:
+    image: postgis/postgis:16-3.4
+    container_name: shuttle_postgis
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: corporate_shuttle
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./docker/initdb.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - postgis_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d corporate_shuttle"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgis_data:
+    name: shuttle_postgis_data
