@@ -1,0 +1,2 @@
+# Store downloaded raw OSM files and pbf extracts here
+# (Files *.osm.pbf, *.osm, *.mbtiles are ignored by .gitignore)
