@@ -1,0 +1,76 @@
+{
+  "source": "UK Department for Environment, Food & Rural Affairs (DEFRA) / DESNZ GHG Conversion Factors",
+  "year": 2024,
+  "standards": "GHG Protocol Scope 3 Category 7 (Employee Commuting)",
+  "fuels": [
+    {
+      "code": "PETROL_92",
+      "name": "Octane 92 Petrol",
+      "unit": "litre",
+      "direct_kg_co2e_per_litre": 2.16274,
+      "well_to_tank_kg_co2e_per_litre": 0.58412,
+      "total_kg_co2e_per_litre": 2.74686
+    },
+    {
+      "code": "AUTO_DIESEL",
+      "name": "Auto Diesel",
+      "unit": "litre",
+      "direct_kg_co2e_per_litre": 2.55784,
+      "well_to_tank_kg_co2e_per_litre": 0.61240,
+      "total_kg_co2e_per_litre": 3.17024
+    },
+    {
+      "code": "HYBRID_PETROL",
+      "name": "Petrol Hybrid (HEV)",
+      "unit": "litre",
+      "direct_kg_co2e_per_litre": 1.83150,
+      "well_to_tank_kg_co2e_per_litre": 0.49120,
+      "total_kg_co2e_per_litre": 2.32270
+    },
+    {
+      "code": "ELECTRIC",
+      "name": "Battery Electric (BEV)",
+      "unit": "kWh",
+      "direct_kg_co2e_per_kwh": 0.0,
+      "well_to_tank_kg_co2e_per_kwh": 0.20707,
+      "total_kg_co2e_per_kwh": 0.20707
+    }
+  ],
+  "vehicles": [
+    {
+      "name": "Small Petrol Car (<1.4L)",
+      "fuel_code": "PETROL_92",
+      "avg_km_per_litre": 15.5,
+      "kg_co2e_per_km": 0.13953,
+      "default_occupancy": 1
+    },
+    {
+      "name": "Medium Petrol Sedan (1.4L - 2.0L)",
+      "fuel_code": "PETROL_92",
+      "avg_km_per_litre": 12.0,
+      "kg_co2e_per_km": 0.18023,
+      "default_occupancy": 1
+    },
+    {
+      "name": "Large Petrol SUV (>2.0L)",
+      "fuel_code": "PETROL_92",
+      "avg_km_per_litre": 8.5,
+      "kg_co2e_per_km": 0.25444,
+      "default_occupancy": 1
+    },
+    {
+      "name": "Diesel Commuter Van (14-seater)",
+      "fuel_code": "AUTO_DIESEL",
+      "avg_km_per_litre": 9.5,
+      "kg_co2e_per_km": 0.26925,
+      "default_occupancy": 10
+    },
+    {
+      "name": "Corporate Shuttle Bus (30-seater)",
+      "fuel_code": "AUTO_DIESEL",
+      "avg_km_per_litre": 5.0,
+      "kg_co2e_per_km": 0.51157,
+      "default_occupancy": 22
+    }
+  ]
+}
