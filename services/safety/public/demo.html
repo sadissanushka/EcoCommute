@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EcoCommute — Module 4 Two-Client Real-Time WebSocket Demo</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --driver-color: #3b82f6;
+      --rider-color: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 24px;
+      line-height: 1.5;
+    }
+    header {
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    h1 { font-size: 1.4rem; font-weight: 700; color: #38bdf8; }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: rgba(56, 189, 248, 0.1);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.2);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    .client-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .client-card.driver { border-top: 4px solid var(--driver-color); }
+    .client-card.rider { border-top: 4px solid var(--rider-color); }
+    .client-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .client-title { font-size: 1.1rem; font-weight: 600; }
+    .status-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #64748b;
+      margin-right: 6px;
+    }
+    .status-dot.connected { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+    .status-dot.disconnected { background: #ef4444; }
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+    button {
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: none;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: #0284c7; color: white; }
+    .btn-primary:hover { background: #0369a1; }
+    .btn-success { background: #059669; color: white; }
+    .btn-warning { background: #d97706; color: white; }
+    .btn-danger { background: #dc2626; color: white; }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-outline:hover { background: rgba(255,255,255,0.05); }
+    .log-box {
+      background: #090d16;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      height: 320px;
+      overflow-y: auto;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.8rem;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .log-entry { padding: 4px 6px; border-radius: 4px; word-break: break-all; }
+    .log-entry.rx { background: rgba(16, 185, 129, 0.1); color: #34d399; }
+    .log-entry.tx { background: rgba(59, 130, 246, 0.1); color: #60a5fa; }
+    .log-entry.warn { background: rgba(245, 158, 11, 0.15); color: #fbbf24; font-weight: bold; }
+    .log-entry.err { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+    .telemetry-bar {
+      display: flex;
+      gap: 16px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      background: rgba(0,0,0,0.2);
+      padding: 8px 12px;
+      border-radius: 6px;
+    }
+    .telemetry-bar span b { color: var(--text); }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Module 4: Two-Client Live Real-Time Demo (Interim Evaluation)</h1>
+      <p style="color: var(--text-muted); font-size: 0.9rem;">Author: Amaraweera MTP (244015X) | RFC 6455 Custom WebSocket Architecture</p>
+    </div>
+    <span class="badge">Room: trip:1</span>
+  </header>
+
+  <div class="grid">
+    <!-- Client A: Driver -->
+    <div class="client-card driver">
+      <div class="client-header">
+        <span class="client-title">🚗 Client A: Sunil Perera (Driver #2)</span>
+        <div><span id="dot-driver" class="status-dot"></span><span id="status-driver" style="font-size: 0.85rem;">Disconnected</span></div>
+      </div>
+      <div class="telemetry-bar">
+        <span>Lat: <b id="driver-lat">6.9042</b></span>
+        <span>Lng: <b id="driver-lng">79.9547</b></span>
+        <span>Speed: <b id="driver-spd">42 km/h</b></span>
+      </div>
+      <div class="controls">
+        <button class="btn-primary" onclick="connectDriver()">1. Connect Driver</button>
+        <button class="btn-success" onclick="sendDriverLocation(0)">2. Send GPS (On-Route)</button>
+        <button class="btn-warning" onclick="sendDriverDeviation(320)">3. Simulate 320m Deviation</button>
+        <button class="btn-danger" onclick="sendDriverSos()">🚨 Manual SOS</button>
+      </div>
+      <div id="log-driver" class="log-box"></div>
+    </div>
+
+    <!-- Client B: Rider -->
+    <div class="client-card rider">
+      <div class="client-header">
+        <span class="client-title">📱 Client B: Kasun Wijesinghe (Rider #5)</span>
+        <div><span id="dot-rider" class="status-dot"></span><span id="status-rider" style="font-size: 0.85rem;">Disconnected</span></div>
+      </div>
+      <div class="telemetry-bar">
+        <span>Latency: <b id="rider-latency">-- ms</b></span>
+        <span>Alert Status: <b id="rider-alert" style="color: #22c55e;">NORMAL</b></span>
+      </div>
+      <div class="controls">
+        <button class="btn-primary" onclick="connectRider()">1. Connect Rider</button>
+        <button class="btn-outline" onclick="clearLogs()">Clear Console</button>
+      </div>
+      <div id="log-rider" class="log-box"></div>
+    </div>
+  </div>
+
+  <script>
+    let wsDriver = null;
+    let wsRider = null;
+    const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+
+    function appendLog(elementId, text, type) {
+      const box = document.getElementById(elementId);
+      const div = document.createElement('div');
+      div.className = `log-entry ${type}`;
+      const time = new Date().toLocaleTimeString();
+      div.textContent = `[${time}] ${text}`;
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    async function fetchTicket(userId, email, role) {
+      // In production calls POST /safety/ticket with Authorization header
+      const res = await fetch('/safety/ticket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, email, role, companyId: 1 })
+      });
+      const data = await res.json();
+      return data.ticket;
+    }
+
+    async function connectDriver() {
+      try {
+        const ticket = await fetchTicket(2, 'driver1@syscolabs.com', 'driver');
+        wsDriver = new WebSocket(`${wsUrl}?ticket=${ticket}`);
+
+        wsDriver.onopen = () => {
+          document.getElementById('dot-driver').className = 'status-dot connected';
+          document.getElementById('status-driver').textContent = 'Connected';
+          appendLog('log-driver', 'WebSocket connection established (Authenticated via 30s ticket)', 'rx');
+          // Join trip room 1
+          wsDriver.send(JSON.stringify({ v: 1, type: 'join', tripId: 1 }));
+        };
+
+        wsDriver.onmessage = (e) => {
+          const msg = JSON.parse(e.data);
+          appendLog('log-driver', `RX: ${JSON.stringify(msg)}`, msg.type === 'deviation' ? 'warn' : 'rx');
+        };
+
+        wsDriver.onclose = (e) => {
+          document.getElementById('dot-driver').className = 'status-dot disconnected';
+          document.getElementById('status-driver').textContent = `Closed (${e.code})`;
+          appendLog('log-driver', `Disconnected (${e.code})`, 'err');
+        };
+      } catch (err) {
+        appendLog('log-driver', `Connection error: ${err.message}`, 'err');
+      }
+    }
+
+    async function connectRider() {
+      try {
+        const ticket = await fetchTicket(5, 'emp1@syscolabs.com', 'employee');
+        wsRider = new WebSocket(`${wsUrl}?ticket=${ticket}`);
+
+        wsRider.onopen = () => {
+          document.getElementById('dot-rider').className = 'status-dot connected';
+          document.getElementById('status-rider').textContent = 'Connected';
+          appendLog('log-rider', 'WebSocket connected (Rider in room trip:1)', 'rx');
+          wsRider.send(JSON.stringify({ v: 1, type: 'join', tripId: 1 }));
+        };
+
+        wsRider.onmessage = (e) => {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'location') {
+            const now = Date.now();
+            const sent = new Date(msg.recordedAt).getTime();
+            const latency = Math.max(1, now - sent);
+            document.getElementById('rider-latency').textContent = `${latency} ms`;
+            appendLog('log-rider', `📍 Live Location from Driver: lat=${msg.lat}, lng=${msg.lng} (Latency: ${latency}ms)`, 'rx');
+          } else if (msg.type === 'deviation') {
+            document.getElementById('rider-alert').textContent = msg.level.toUpperCase();
+            document.getElementById('rider-alert').style.color = '#f59e0b';
+            appendLog('log-rider', `⚠️ ROUTE DEVIATION DETECTED: ${msg.distanceM}m off-route! Level: ${msg.level}`, 'warn');
+          } else if (msg.type === 'sos') {
+            document.getElementById('rider-alert').textContent = 'EMERGENCY SOS';
+            document.getElementById('rider-alert').style.color = '#ef4444';
+            appendLog('log-rider', `🚨 SOS BROADCAST RECEIVED: ${JSON.stringify(msg)}`, 'err');
+          } else {
+            appendLog('log-rider', `RX: ${JSON.stringify(msg)}`, 'rx');
+          }
+        };
+
+        wsRider.onclose = (e) => {
+          document.getElementById('dot-rider').className = 'status-dot disconnected';
+          document.getElementById('status-rider').textContent = `Closed (${e.code})`;
+          appendLog('log-rider', `Disconnected (${e.code})`, 'err');
+        };
+      } catch (err) {
+        appendLog('log-rider', `Connection error: ${err.message}`, 'err');
+      }
+    }
+
+    function sendDriverLocation(offsetM) {
+      if (!wsDriver || wsDriver.readyState !== WebSocket.OPEN) {
+        alert('Driver is not connected!');
+        return;
+      }
+      const lat = 6.9042 + (offsetM / 111000.0);
+      const lng = 79.9547;
+      const payload = {
+        v: 1,
+        type: 'location',
+        tripId: 1,
+        lat,
+        lng,
+        speed: 11.5,
+        heading: 260.0,
+        accuracy: 4.2,
+        recordedAt: new Date().toISOString()
+      };
+      wsDriver.send(JSON.stringify(payload));
+      appendLog('log-driver', `TX Location: lat=${lat.toFixed(5)}, lng=${lng}`, 'tx');
+    }
+
+    function sendDriverDeviation(offsetM) {
+      sendDriverLocation(offsetM);
+    }
+
+    function sendDriverSos() {
+      if (!wsDriver || wsDriver.readyState !== WebSocket.OPEN) return;
+      wsDriver.send(JSON.stringify({
+        v: 1,
+        type: 'sos',
+        tripId: 1,
+        lat: 6.9042,
+        lng: 79.9547,
+        note: 'Driver triggered manual SOS'
+      }));
+      appendLog('log-driver', 'TX: Manual SOS sent', 'tx');
+    }
+
+    function clearLogs() {
+      document.getElementById('log-driver').innerHTML = '';
+      document.getElementById('log-rider').innerHTML = '';
+    }
+  </script>
+</body>
+</html>
