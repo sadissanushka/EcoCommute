@@ -18,6 +18,27 @@ services:
       timeout: 5s
       retries: 5
 
+  routing-engine:
+    build:
+      context: ./services/routing-engine
+      dockerfile: Dockerfile
+    container_name: shuttle_routing_engine
+    restart: unless-stopped
+    depends_on:
+      postgis:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://postgres:postgres@postgis:5432/corporate_shuttle
+      DB_HOST: postgis
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: corporate_shuttle
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+
 volumes:
   postgis_data:
     name: shuttle_postgis_data
