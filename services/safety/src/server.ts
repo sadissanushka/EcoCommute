@@ -7,6 +7,7 @@ import url from 'url';
 import { config } from './config';
 import { healthRouter } from './routes/health';
 import { ticketRouter, redeemTicket, verifyJwtToken } from './routes/ticket';
+import { otpRouter } from './routes/otp';
 import { AuthUser } from './types';
 import { handleWebSocketMessage } from './websocket/handler';
 import { roomManager } from './websocket/rooms';
@@ -21,6 +22,8 @@ app.use(express.static('public'));
 // Routes
 app.use('/', healthRouter);
 app.use('/safety', ticketRouter);
+app.use('/safety/otp', otpRouter);
+app.use('/otp', otpRouter);
 
 export const server = http.createServer(app);
 
