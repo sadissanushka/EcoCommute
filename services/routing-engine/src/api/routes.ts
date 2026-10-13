@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { RoadGraph } from '../graph/graph.js';
 import { findShortestPathDijkstra } from '../routing/dijkstra.js';
+import { findShortestPathAStar } from '../routing/astar.js';
 import { pool } from '../graph/db.js';
 
 export function createRouter(graph: RoadGraph): Router {
@@ -53,7 +54,7 @@ export function createRouter(graph: RoadGraph): Router {
       return;
     }
 
-    const { origin, destination, mode } = parseResult.data;
+    const { origin, destination, mode, algorithm } = parseResult.data;
 
     try {
       // 1. Snap origin and destination to nearest nodes
@@ -67,13 +68,11 @@ export function createRouter(graph: RoadGraph): Router {
         return;
       }
 
-      // 2. Run Dijkstra
-      const routeResult = findShortestPathDijkstra(
-        graph,
-        snappedOrigin.nodeId,
-        snappedDestination.nodeId,
-        { mode }
-      );
+      // 2. Run selected routing algorithm
+      const routeResult =
+        algorithm === 'astar'
+          ? findShortestPathAStar(graph, snappedOrigin.nodeId, snappedDestination.nodeId, { mode })
+          : findShortestPathDijkstra(graph, snappedOrigin.nodeId, snappedDestination.nodeId, { mode });
 
       if (!routeResult) {
         res.status(404).json({
@@ -83,6 +82,7 @@ export function createRouter(graph: RoadGraph): Router {
       }
 
       res.json({
+        algorithm,
         distanceM: routeResult.distanceM,
         etaSeconds: routeResult.etaSeconds,
         path: routeResult.path,

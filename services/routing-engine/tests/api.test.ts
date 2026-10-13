@@ -59,4 +59,41 @@ describe('Routing Engine API Endpoints', () => {
 
     expect(res.status).toBe(400);
   });
+
+  test('POST /route fails with 400 on unsupported algorithm', async () => {
+    const res = await request(app)
+      .post('/route')
+      .send({
+        origin: { lat: 6.92, lng: 79.85 },
+        destination: { lat: 6.93, lng: 79.86 },
+        algorithm: 'floyd-warshall',
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Invalid request body');
+  });
+
+  test('POST /route computes route using A* when snapped nodes exist', async () => {
+    jest.spyOn(RoadGraph, 'snapToNearestNode').mockImplementation(async (pt) => {
+      if (Math.abs(pt.lat - 6.9344) < 0.01) {
+        return { nodeId: '1', distanceM: 5, location: { lat: 6.9344, lng: 79.8428 } };
+      }
+      return { nodeId: '2', distanceM: 10, location: { lat: 6.9218, lng: 79.8533 } };
+    });
+
+    const res = await request(app)
+      .post('/route')
+      .send({
+        origin: { lat: 6.9344, lng: 79.8428 },
+        destination: { lat: 6.9218, lng: 79.8533 },
+        algorithm: 'astar',
+        mode: 'distance',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.algorithm).toBe('astar');
+    expect(res.body.distanceM).toBe(1800);
+    expect(res.body.nodeCount).toBe(2);
+    expect(res.body.nodesExpanded).toBeGreaterThan(0);
+  });
 });
