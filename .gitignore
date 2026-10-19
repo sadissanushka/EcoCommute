@@ -29,3 +29,6 @@ Thumbs.db
 # Coverage / Logs
 coverage/
 *.log
+
+Module*_Dev_Plan_*.md
+Team_Integration_Guide_*.md
