@@ -170,6 +170,45 @@ analyticsRouter.get('/timeseries', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /analytics/by-zone
+ * Returns trip volume and carbon avoided broken down by spatial zones.
+ */
+analyticsRouter.get('/by-zone', async (req: Request, res: Response) => {
+  try {
+    const companyId = req.user!.companyId || 1;
+    const resDb = await pool.query(
+      `SELECT 
+         oz.id AS "originZoneId",
+         oz.name AS "originZoneName",
+         dz.id AS "destZoneId",
+         dz.name AS "destZoneName",
+         COUNT(ft.trip_id)::INT AS "totalTrips",
+         ROUND(SUM(ft.distance_km)::numeric, 2)::REAL AS "totalDistanceKm",
+         ROUND(SUM(ft.co2_avoided_kg)::numeric, 2)::REAL AS "totalCo2AvoidedKg"
+       FROM analytics.fact_trips ft
+       LEFT JOIN analytics.zones oz ON oz.id = ft.origin_zone_id
+       LEFT JOIN analytics.zones dz ON dz.id = ft.dest_zone_id
+       WHERE ft.company_id = $1
+       GROUP BY oz.id, oz.name, dz.id, dz.name
+       ORDER BY "totalTrips" DESC
+       LIMIT 50`,
+      [companyId]
+    );
+
+    res.json({
+      data: {
+        companyId,
+        zones: resDb.rows,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      error: { code: 'DATABASE_ERROR', message: err.message, details: {} },
+    });
+  }
+});
+
+/**
  * GET /analytics/export
  * Exports analytical facts as CSV or JSON format.
  */
