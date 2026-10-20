@@ -278,3 +278,98 @@ export function generateInterpolatedPath(
   result.push(coords[coords.length - 1]);
   return result;
 }
+
+// Creates a custom location from map click or user search
+export function createCustomLocation(name: string, lat: number, lng: number): RoadNode {
+  const nearest = findNearestNode(lat, lng);
+  const id = `custom_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+  return {
+    id,
+    name,
+    lat,
+    lng,
+    nearestNodeId: nearest.id,
+  } as RoadNode;
+}
+
+// Multi-Stop Route Finder: Calculates shortest path across N custom locations
+export function findMultiStopRoute(
+  stops: RoadNode[],
+  useAStar: boolean = true
+): RouteResult {
+  if (stops.length < 2) {
+    return {
+      pathNodes: stops,
+      coordinates: stops.map((s) => [s.lat, s.lng]),
+      distanceMeters: 0,
+      durationSeconds: 0,
+      co2SavedKg: 0,
+      nodesExpanded: 0,
+      algorithm: useAStar ? 'A*' : 'Dijkstra',
+    };
+  }
+
+  let totalDist = 0;
+  let totalDuration = 0;
+  let totalNodesExpanded = 0;
+  const combinedCoordinates: [number, number][] = [];
+  const combinedPathNodes: RoadNode[] = [];
+
+  for (let i = 0; i < stops.length - 1; i++) {
+    const fromStop = stops[i];
+    const toStop = stops[i + 1];
+
+    const fromId =
+      (fromStop as any).nearestNodeId ||
+      (COLOMBO_NODES[fromStop.id]
+        ? fromStop.id
+        : findNearestNode(fromStop.lat, fromStop.lng).id);
+    const toId =
+      (toStop as any).nearestNodeId ||
+      (COLOMBO_NODES[toStop.id]
+        ? toStop.id
+        : findNearestNode(toStop.lat, toStop.lng).id);
+
+    const leg = findShortestPath(fromId, toId, useAStar);
+
+    totalDist += leg.distanceMeters;
+    totalDuration += leg.durationSeconds;
+    totalNodesExpanded += leg.nodesExpanded;
+
+    const legCoords: [number, number][] = [
+      [fromStop.lat, fromStop.lng],
+      ...leg.coordinates,
+      [toStop.lat, toStop.lng],
+    ];
+
+    for (let c = 0; c < legCoords.length; c++) {
+      if (
+        combinedCoordinates.length === 0 ||
+        combinedCoordinates[combinedCoordinates.length - 1][0] !== legCoords[c][0] ||
+        combinedCoordinates[combinedCoordinates.length - 1][1] !== legCoords[c][1]
+      ) {
+        combinedCoordinates.push(legCoords[c]);
+      }
+    }
+
+    if (i === 0) {
+      combinedPathNodes.push(fromStop);
+    }
+    combinedPathNodes.push(
+      ...leg.pathNodes.filter((n) => n.id !== fromId && n.id !== toId)
+    );
+    combinedPathNodes.push(toStop);
+  }
+
+  const co2SavedKg = Number(((totalDist / 1000) * 0.171 * 0.72).toFixed(2));
+
+  return {
+    pathNodes: combinedPathNodes,
+    coordinates: combinedCoordinates,
+    distanceMeters: totalDist,
+    durationSeconds: totalDuration,
+    co2SavedKg,
+    nodesExpanded: totalNodesExpanded,
+    algorithm: useAStar ? 'A*' : 'Dijkstra',
+  };
+}

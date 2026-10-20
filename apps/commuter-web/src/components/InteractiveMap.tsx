@@ -1,46 +1,65 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
-import { RoadNode, COLOMBO_NODES } from '../lib/graph';
+import { RoadNode, COLOMBO_NODES, findNearestNode, createCustomLocation } from '../lib/graph';
 
-interface InteractiveMapProps {
-  originNode: RoadNode;
-  destNode: RoadNode;
+export interface InteractiveMapProps {
+  waypoints: RoadNode[];
   routeCoordinates: [number, number][];
-  onSelectNode: (node: RoadNode, type: 'origin' | 'dest') => void;
-  selectionMode: 'origin' | 'dest';
+  onAddWaypoint: (node: RoadNode) => void;
+  onUpdateWaypoint: (index: number, updated: RoadNode) => void;
+  onRemoveWaypoint: (index: number) => void;
   vehiclePosition: [number, number] | null;
   baseMapType?: 'esri' | 'osm' | 'dark';
+  isDropMode?: boolean;
 }
 
 export const InteractiveMap: React.FC<InteractiveMapProps> = ({
-  originNode,
-  destNode,
+  waypoints,
   routeCoordinates,
-  onSelectNode,
-  selectionMode,
+  onAddWaypoint,
+  onUpdateWaypoint,
+  onRemoveWaypoint,
   vehiclePosition,
   baseMapType = 'esri',
+  isDropMode = false,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const routePolylineRef = useRef<L.Polyline | null>(null);
   const casingPolylineRef = useRef<L.Polyline | null>(null);
-  const originMarkerRef = useRef<L.Marker | null>(null);
-  const destMarkerRef = useRef<L.Marker | null>(null);
+  const waypointMarkersRef = useRef<L.Marker[]>([]);
   const vehicleMarkerRef = useRef<L.Marker | null>(null);
   const nodeMarkersLayerRef = useRef<L.LayerGroup | null>(null);
 
+  // References to keep event listeners up to date with props without re-initializing Leaflet
+  const waypointsRef = useRef(waypoints);
+  waypointsRef.current = waypoints;
+
+  const onAddWaypointRef = useRef(onAddWaypoint);
+  onAddWaypointRef.current = onAddWaypoint;
+
+  const onUpdateWaypointRef = useRef(onUpdateWaypoint);
+  onUpdateWaypointRef.current = onUpdateWaypoint;
+
+  const onRemoveWaypointRef = useRef(onRemoveWaypoint);
+  onRemoveWaypointRef.current = onRemoveWaypoint;
+
+  const isDropModeRef = useRef(isDropMode);
+  isDropModeRef.current = isDropMode;
+
   // Custom HTML Pin Icons
-  const createPinIcon = (label: string, bgClass: string) => {
+  const createPinIcon = (label: string, bgClass: string, isIntermediate: boolean = false) => {
     return L.divIcon({
       className: 'custom-map-pin',
       html: `
         <div style="position: relative; display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%);">
-          <div style="width: 32px; height: 32px; border-radius: 50%; background-color: ${bgClass}; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); border: 2.5px solid white;">
+          <div style="min-width: 28px; height: 28px; padding: 0 5px; border-radius: 14px; background-color: ${bgClass}; color: white; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: ${
+            isIntermediate ? '11px' : '13px'
+          }; box-shadow: 0 4px 14px rgba(0,0,0,0.3); border: 2.5px solid white;">
             ${label}
           </div>
-          <div style="width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 8px solid ${bgClass}; margin-top: -2px;"></div>
+          <div style="width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 7px solid ${bgClass}; margin-top: -2px;"></div>
         </div>
       `,
       iconSize: [0, 0],
@@ -53,10 +72,10 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       className: 'custom-vehicle-pin',
       html: `
         <div style="position: relative; display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -50%);">
-          <div style="width: 40px; height: 40px; border-radius: 50%; background-color: #0d631b; color: white; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 16px rgba(13,99,27,0.4); border: 2.5px solid white;">
-            <span style="font-family: 'Material Symbols Outlined'; font-size: 22px;">directions_bus</span>
+          <div style="width: 38px; height: 38px; border-radius: 50%; background-color: #0d631b; color: white; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 16px rgba(13,99,27,0.45); border: 2.5px solid white;">
+            <span style="font-family: 'Material Symbols Outlined'; font-size: 20px;">directions_bus</span>
           </div>
-          <div style="position: absolute; width: 48px; height: 48px; border-radius: 50%; border: 2px solid #0d631b; opacity: 0.6; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+          <div style="position: absolute; width: 46px; height: 46px; border-radius: 50%; border: 2px solid #0d631b; opacity: 0.6; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
         </div>
       `,
       iconSize: [0, 0],
@@ -74,7 +93,6 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       zoomControl: false,
     });
 
-    // Clean, free vector-style tiles with ZERO watermarks (ESRI & OSM)
     const getTileUrl = (type: 'esri' | 'osm' | 'dark') => {
       switch (type) {
         case 'osm':
@@ -102,7 +120,20 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // Layer for road nodes
+    // Click handler to drop custom locations directly onto the map
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      const { lat, lng } = e.latlng;
+      const nearest = findNearestNode(lat, lng);
+      const stopNumber = waypointsRef.current.length;
+      const customLocation = createCustomLocation(
+        `Custom Stop ${stopNumber} (near ${nearest.name})`,
+        lat,
+        lng
+      );
+      onAddWaypointRef.current(customLocation);
+    });
+
+    // Layer for predefined road hubs
     const nodeLayer = L.layerGroup().addTo(map);
     nodeMarkersLayerRef.current = nodeLayer;
 
@@ -116,13 +147,14 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         weight: 2,
       });
 
-      circle.bindTooltip(`<b>${node.name}</b><br/>Click to set waypoint`, {
+      circle.bindTooltip(`<b>${node.name}</b><br/>Click to add as stop`, {
         direction: 'top',
         className: 'leaflet-custom-tooltip',
       });
 
-      circle.on('click', () => {
-        onSelectNode(node, selectionMode);
+      circle.on('click', (ev) => {
+        L.DomEvent.stopPropagation(ev);
+        onAddWaypointRef.current(node);
       });
 
       nodeLayer.addLayer(circle);
@@ -172,48 +204,102 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
     tileLayerRef.current = tile;
   }, [baseMapType]);
 
-  // 2. Update Origin & Destination Markers
+  // Adjust cursor style when Drop Mode is active
+  useEffect(() => {
+    if (mapContainerRef.current) {
+      if (isDropMode) {
+        mapContainerRef.current.style.cursor = 'crosshair';
+      } else {
+        mapContainerRef.current.style.cursor = '';
+      }
+    }
+  }, [isDropMode]);
+
+  // 2. Render and sync all Waypoint Markers (A, 1, 2, ..., B)
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    // Origin Marker (A)
-    if (originMarkerRef.current) {
-      originMarkerRef.current.setLatLng([originNode.lat, originNode.lng]);
-    } else {
-      originMarkerRef.current = L.marker([originNode.lat, originNode.lng], {
-        icon: createPinIcon('A', '#0d631b'),
+    // Clear previous markers
+    waypointMarkersRef.current.forEach((marker) => marker.remove());
+    waypointMarkersRef.current = [];
+
+    const total = waypoints.length;
+
+    waypoints.forEach((wp, idx) => {
+      let label: string;
+      let bgColor: string;
+      const isOrigin = idx === 0;
+      const isDestination = idx === total - 1 && total > 1;
+
+      if (isOrigin) {
+        label = 'A';
+        bgColor = '#0d631b'; // Primary Emerald
+      } else if (isDestination) {
+        label = 'B';
+        bgColor = '#ba1a1a'; // Crimson Red
+      } else {
+        label = `${idx}`;
+        bgColor = '#0284c7'; // Blue/Sky
+      }
+
+      const marker = L.marker([wp.lat, wp.lng], {
+        icon: createPinIcon(label, bgColor, !isOrigin && !isDestination),
         draggable: true,
+        title: wp.name,
       }).addTo(map);
 
-      originMarkerRef.current.on('dragend', (e: any) => {
-        const { lat, lng } = e.target.getLatLng();
-        onSelectNode({ id: 'custom_origin', name: 'Custom Origin Pin', lat, lng }, 'origin');
-      });
-    }
+      // Bind interactive popup
+      const popupDiv = document.createElement('div');
+      popupDiv.className = 'p-1 text-xs font-sans';
+      popupDiv.innerHTML = `
+        <div style="font-weight: 700; margin-bottom: 2px;">${label}. ${wp.name}</div>
+        <div style="font-size: 10px; color: #64748b; margin-bottom: 6px;">
+          Lat: ${wp.lat.toFixed(4)}, Lng: ${wp.lng.toFixed(4)}
+        </div>
+        <div style="display: flex; gap: 4px;">
+          ${
+            total > 2
+              ? `<button id="delete-stop-btn-${idx}" style="background-color: #fee2e2; color: #dc2626; border: 1px solid #fecaca; border-radius: 6px; padding: 2px 8px; font-weight: 600; cursor: pointer; font-size: 11px;">Remove Stop</button>`
+              : ''
+          }
+        </div>
+      `;
 
-    // Destination Marker (B)
-    if (destMarkerRef.current) {
-      destMarkerRef.current.setLatLng([destNode.lat, destNode.lng]);
-    } else {
-      destMarkerRef.current = L.marker([destNode.lat, destNode.lng], {
-        icon: createPinIcon('B', '#ba1a1a'),
-        draggable: true,
-      }).addTo(map);
+      marker.bindPopup(popupDiv);
 
-      destMarkerRef.current.on('dragend', (e: any) => {
-        const { lat, lng } = e.target.getLatLng();
-        onSelectNode({ id: 'custom_dest', name: 'Custom Destination Pin', lat, lng }, 'dest');
+      marker.on('popupopen', () => {
+        const delBtn = document.getElementById(`delete-stop-btn-${idx}`);
+        if (delBtn) {
+          delBtn.onclick = () => {
+            onRemoveWaypointRef.current(idx);
+          };
+        }
       });
-    }
-  }, [originNode, destNode]);
+
+      // Draggable marker logic
+      marker.on('dragend', (e: any) => {
+        const { lat, lng } = e.target.getLatLng();
+        const nearest = findNearestNode(lat, lng);
+        const updated: RoadNode = {
+          ...wp,
+          lat,
+          lng,
+          name: wp.id.startsWith('custom_') ? `Custom Pin (${lat.toFixed(3)}, ${lng.toFixed(3)})` : wp.name,
+          nearestNodeId: nearest.id,
+        } as any;
+        onUpdateWaypointRef.current(idx, updated);
+      });
+
+      waypointMarkersRef.current.push(marker);
+    });
+  }, [waypoints]);
 
   // 3. Update Route Polyline
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    // Remove old polylines
     if (casingPolylineRef.current) {
       casingPolylineRef.current.remove();
       casingPolylineRef.current = null;
@@ -233,7 +319,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         opacity: 0.95,
       }).addTo(map);
 
-      // Primary emerald corridor line
+      // Primary corridor line
       routePolylineRef.current = L.polyline(routeCoordinates, {
         color: '#0d631b',
         weight: 5,
@@ -243,9 +329,9 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         opacity: 1,
       }).addTo(map);
 
-      // Fit map bounds to view route
+      // Fit map bounds to view all route waypoints nicely
       const bounds = L.latLngBounds(routeCoordinates);
-      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 });
+      map.fitBounds(bounds, { padding: [70, 70], maxZoom: 14 });
     }
   }, [routeCoordinates]);
 

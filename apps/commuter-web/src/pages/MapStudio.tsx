@@ -1,23 +1,29 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { InteractiveMap } from '../components/InteractiveMap';
 import {
   COLOMBO_NODES,
   CORRIDOR_PRESETS,
   RoadNode,
   CorridorPreset,
-  findShortestPath,
+  findMultiStopRoute,
   generateInterpolatedPath,
   RouteResult,
+  createCustomLocation,
 } from '../lib/graph';
 
 export const MapStudio: React.FC = () => {
-  const [originNode, setOriginNode] = useState<RoadNode>(COLOMBO_NODES.fort);
-  const [destNode, setDestNode] = useState<RoadNode>(COLOMBO_NODES.uom);
+  // Array of stops/waypoints (Origin = index 0, Destination = last index)
+  const [waypoints, setWaypoints] = useState<RoadNode[]>([
+    COLOMBO_NODES.fort,
+    COLOMBO_NODES.uom,
+  ]);
   const [activePreset, setActivePreset] = useState<string>('corridor-1');
-  const [selectionMode, setSelectionMode] = useState<'origin' | 'dest'>('dest');
   const [useAStar, setUseAStar] = useState<boolean>(true);
   const [baseMapType, setBaseMapType] = useState<'esri' | 'osm' | 'dark'>('esri');
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
+  const [isDropMode, setIsDropMode] = useState<boolean>(false);
+  const [showAddMenu, setShowAddMenu] = useState<boolean>(false);
+  const [isWaypointsExpanded, setIsWaypointsExpanded] = useState<boolean>(true);
 
   // Simulation State
   const [isSimulating, setIsSimulating] = useState(false);
@@ -28,18 +34,18 @@ export const MapStudio: React.FC = () => {
   // Detour Threshold Slider (Module 1 matching feature)
   const [detourThresholdM, setDetourThresholdM] = useState(1500);
 
-  // Compute shortest path whenever origin, destination, or algorithm changes
+  // Recompute route whenever waypoints or algorithm changes
   useEffect(() => {
-    if (originNode && destNode) {
-      const result = findShortestPath(originNode.id, destNode.id, useAStar);
+    if (waypoints.length >= 2) {
+      const result = findMultiStopRoute(waypoints, useAStar);
       setRouteResult(result);
 
-      const smoothPoints = generateInterpolatedPath(result.coordinates, 12);
+      const smoothPoints = generateInterpolatedPath(result.coordinates, 10);
       setInterpolatedPoints(smoothPoints);
       setSimIndex(0);
       setIsSimulating(false);
     }
-  }, [originNode, destNode, useAStar]);
+  }, [waypoints, useAStar]);
 
   // Simulation timer
   useEffect(() => {
@@ -55,33 +61,70 @@ export const MapStudio: React.FC = () => {
       });
       // Vary speed realistically
       setSimSpeed(Math.floor(38 + Math.random() * 14));
-    }, 150);
+    }, 140);
 
     return () => clearInterval(interval);
   }, [isSimulating, interpolatedPoints]);
 
   const handleSelectPreset = (preset: CorridorPreset) => {
     setActivePreset(preset.id);
-    setOriginNode(COLOMBO_NODES[preset.originNode]);
-    setDestNode(COLOMBO_NODES[preset.destNode]);
+    setWaypoints([COLOMBO_NODES[preset.originNode], COLOMBO_NODES[preset.destNode]]);
   };
 
-  const handleSwapPoints = () => {
-    const temp = originNode;
-    setOriginNode(destNode);
-    setDestNode(temp);
+  const handleSwapOriginDest = () => {
+    if (waypoints.length < 2) return;
+    const newWaypoints = [...waypoints];
+    const first = newWaypoints[0];
+    newWaypoints[0] = newWaypoints[newWaypoints.length - 1];
+    newWaypoints[newWaypoints.length - 1] = first;
+    setWaypoints(newWaypoints);
     setActivePreset('');
   };
 
-  const handleSelectNodeFromMap = (node: RoadNode, type: 'origin' | 'dest') => {
-    if (type === 'origin') {
-      setOriginNode(node);
-      setSelectionMode('dest');
+  const handleAddWaypoint = (node: RoadNode) => {
+    // Insert before final destination so origin and destination bookend the route
+    if (waypoints.length >= 2) {
+      const updated = [...waypoints];
+      updated.splice(updated.length - 1, 0, node);
+      setWaypoints(updated);
     } else {
-      setDestNode(node);
-      setSelectionMode('origin');
+      setWaypoints([...waypoints, node]);
     }
     setActivePreset('');
+    setShowAddMenu(false);
+  };
+
+  const handleUpdateWaypoint = (index: number, updated: RoadNode) => {
+    const nextWaypoints = [...waypoints];
+    nextWaypoints[index] = updated;
+    setWaypoints(nextWaypoints);
+    setActivePreset('');
+  };
+
+  const handleRemoveWaypoint = (index: number) => {
+    if (waypoints.length <= 2) return;
+    const nextWaypoints = waypoints.filter((_, idx) => idx !== index);
+    setWaypoints(nextWaypoints);
+    setActivePreset('');
+  };
+
+  const handleMoveWaypoint = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= waypoints.length) return;
+
+    const updated = [...waypoints];
+    const temp = updated[index];
+    updated[index] = updated[targetIndex];
+    updated[targetIndex] = temp;
+    setWaypoints(updated);
+    setActivePreset('');
+  };
+
+  const handleAddPredefinedStop = (nodeKey: string) => {
+    const node = COLOMBO_NODES[nodeKey];
+    if (node) {
+      handleAddWaypoint(node);
+    }
   };
 
   const currentVehiclePos =
@@ -97,17 +140,34 @@ export const MapStudio: React.FC = () => {
       {/* 1. Full-Screen Interactive Leaflet Map Layer */}
       <div className="absolute inset-0 z-0">
         <InteractiveMap
-          originNode={originNode}
-          destNode={destNode}
+          waypoints={waypoints}
           routeCoordinates={routeResult?.coordinates || []}
-          onSelectNode={handleSelectNodeFromMap}
-          selectionMode={selectionMode}
+          onAddWaypoint={handleAddWaypoint}
+          onUpdateWaypoint={handleUpdateWaypoint}
+          onRemoveWaypoint={handleRemoveWaypoint}
           vehiclePosition={currentVehiclePos}
           baseMapType={baseMapType}
+          isDropMode={isDropMode}
         />
       </div>
 
-      {/* 2. Top Header & Floating Search Card */}
+      {/* 2. Drop Mode Banner Notification */}
+      {isDropMode && (
+        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-40 bg-secondary text-on-secondary px-4 py-2 rounded-full shadow-2xl border border-white/40 flex items-center gap-2 animate-bounce">
+          <span className="material-symbols-outlined text-[18px]">add_location_alt</span>
+          <span className="text-xs font-bold tracking-wide">
+            Click anywhere on the map to add a custom stop
+          </span>
+          <button
+            onClick={() => setIsDropMode(false)}
+            className="ml-2 w-5 h-5 rounded-full bg-black/20 hover:bg-black/30 flex items-center justify-center text-xs cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* 3. Top Header & Floating Multi-Stop Card */}
       <div className="absolute top-3 left-3 right-3 z-30 max-w-lg mx-auto flex flex-col gap-2">
         {/* Brand Bar */}
         <div className="bg-surface/90 backdrop-blur-xl px-4 py-2.5 rounded-2xl shadow-lg border border-white/60 flex items-center justify-between">
@@ -119,7 +179,7 @@ export const MapStudio: React.FC = () => {
               <div className="flex items-center gap-1.5">
                 <span className="font-bold text-sm text-primary tracking-tight">EcoCommute</span>
                 <span className="text-[10px] bg-primary-fixed text-on-primary-fixed font-bold px-1.5 py-0.2 rounded-full uppercase">
-                  Map Studio
+                  Multi-Stop Studio
                 </span>
               </div>
               <span className="text-[11px] text-on-surface-variant font-medium">
@@ -155,7 +215,7 @@ export const MapStudio: React.FC = () => {
               </button>
             </div>
 
-            {/* Algorithm Mode Switcher */}
+            {/* Algorithm Switcher */}
             <div className="flex items-center bg-surface-container-low p-0.5 rounded-xl border border-outline-variant/30">
               <button
                 onClick={() => setUseAStar(true)}
@@ -181,64 +241,170 @@ export const MapStudio: React.FC = () => {
           </div>
         </div>
 
-        {/* Unified Origin & Destination Selector Pill */}
+        {/* Multi-Stop Routing Manager Card */}
         <div className="bg-surface/95 backdrop-blur-xl p-3 rounded-2xl shadow-xl border border-white/60 flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 flex flex-col gap-1.5">
-              {/* Pickup Point */}
-              <div
-                onClick={() => setSelectionMode('origin')}
-                className={`flex items-center gap-2 p-1.5 rounded-xl border transition-all cursor-pointer ${
-                  selectionMode === 'origin'
-                    ? 'bg-primary/5 border-primary ring-1 ring-primary/30'
-                    : 'bg-surface-container-low border-outline-variant/30'
-                }`}
-              >
-                <div className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-bold text-xs shrink-0">
-                  A
-                </div>
-                <div className="min-w-0 flex-1">
-                  <span className="text-[9px] uppercase font-bold text-outline block leading-none">
-                    Origin (Pickup)
-                  </span>
-                  <span className="text-xs font-bold text-on-surface truncate block">
-                    {originNode.name}
-                  </span>
-                </div>
-              </div>
-
-              {/* Destination Point */}
-              <div
-                onClick={() => setSelectionMode('dest')}
-                className={`flex items-center gap-2 p-1.5 rounded-xl border transition-all cursor-pointer ${
-                  selectionMode === 'dest'
-                    ? 'bg-secondary/5 border-secondary ring-1 ring-secondary/30'
-                    : 'bg-surface-container-low border-outline-variant/30'
-                }`}
-              >
-                <div className="w-6 h-6 rounded-full bg-error text-on-error flex items-center justify-center font-bold text-xs shrink-0">
-                  B
-                </div>
-                <div className="min-w-0 flex-1">
-                  <span className="text-[9px] uppercase font-bold text-outline block leading-none">
-                    Destination (Drop-off)
-                  </span>
-                  <span className="text-xs font-bold text-on-surface truncate block">
-                    {destNode.name}
-                  </span>
-                </div>
-              </div>
+          {/* Header of Stops with Add and Collapse */}
+          <div className="flex items-center justify-between pb-1 border-b border-outline-variant/30">
+            <div className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-primary text-[18px]">route</span>
+              <span className="text-xs font-bold text-on-surface">
+                Route Corridor ({waypoints.length} Stops)
+              </span>
             </div>
 
-            {/* Swap Button */}
-            <button
-              onClick={handleSwapPoints}
-              title="Swap origin and destination"
-              className="w-10 h-10 rounded-2xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface flex items-center justify-center shadow-sm active:scale-90 transition-transform cursor-pointer shrink-0"
-            >
-              <span className="material-symbols-outlined text-[20px]">swap_vert</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              {/* Toggle Drop Pin Mode */}
+              <button
+                onClick={() => setIsDropMode(!isDropMode)}
+                title="Click on map to drop custom pin"
+                className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  isDropMode
+                    ? 'bg-secondary text-on-secondary shadow-md'
+                    : 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[16px]">pin_drop</span>
+                <span>{isDropMode ? 'Pinning...' : 'Drop Pin'}</span>
+              </button>
+
+              {/* Add Stop Button */}
+              <button
+                onClick={() => setShowAddMenu(!showAddMenu)}
+                className="px-2.5 py-1 rounded-xl bg-primary text-on-primary text-xs font-bold flex items-center gap-1 shadow-sm hover:bg-primary-container transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">add_circle</span>
+                <span>Add Stop</span>
+              </button>
+
+              {/* Swap Origin / Destination */}
+              <button
+                onClick={handleSwapOriginDest}
+                title="Reverse corridor direction"
+                className="w-7 h-7 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface flex items-center justify-center transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">swap_vert</span>
+              </button>
+
+              {/* Collapse/Expand Toggle */}
+              <button
+                onClick={() => setIsWaypointsExpanded(!isWaypointsExpanded)}
+                className="w-7 h-7 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface flex items-center justify-center transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  {isWaypointsExpanded ? 'expand_less' : 'expand_more'}
+                </span>
+              </button>
+            </div>
           </div>
+
+          {/* Quick Hub Selector Dropdown (when Add Stop is clicked) */}
+          {showAddMenu && (
+            <div className="p-2.5 bg-surface-container-lowest rounded-xl border border-primary/30 flex flex-col gap-2">
+              <div className="flex items-center justify-between text-[11px] font-bold text-on-surface">
+                <span>Select Colombo Hub or Custom Location:</span>
+                <button
+                  onClick={() => setShowAddMenu(false)}
+                  className="text-outline hover:text-on-surface text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto pr-1">
+                {Object.values(COLOMBO_NODES).map((node) => (
+                  <button
+                    key={node.id}
+                    onClick={() => handleAddPredefinedStop(node.id)}
+                    className="p-1.5 text-left text-[11px] rounded-lg bg-surface hover:bg-primary/10 hover:text-primary border border-outline-variant/30 truncate font-medium cursor-pointer transition-colors"
+                  >
+                    📍 {node.name}
+                  </button>
+                ))}
+              </div>
+              <div className="pt-1 border-t border-outline-variant/20 flex items-center justify-between">
+                <span className="text-[10px] text-outline">Or click anywhere on map</span>
+                <button
+                  onClick={() => {
+                    setIsDropMode(true);
+                    setShowAddMenu(false);
+                  }}
+                  className="text-[11px] font-bold text-secondary flex items-center gap-1 hover:underline cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[14px]">pin_drop</span>
+                  Click Map to Place
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Waypoints List (Origin, Waypoints 1...N, Destination) */}
+          {isWaypointsExpanded && (
+            <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
+              {waypoints.map((wp, idx) => {
+                const isOrigin = idx === 0;
+                const isDest = idx === waypoints.length - 1;
+                const badgeLabel = isOrigin ? 'A' : isDest ? 'B' : `${idx}`;
+                const badgeBg = isOrigin
+                  ? 'bg-primary text-on-primary'
+                  : isDest
+                  ? 'bg-error text-on-error'
+                  : 'bg-secondary text-on-secondary';
+
+                return (
+                  <div
+                    key={`${wp.id}-${idx}`}
+                    className="flex items-center justify-between p-1.5 rounded-xl bg-surface-container-low border border-outline-variant/30 hover:border-outline-variant transition-all"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div
+                        className={`w-6 h-6 rounded-full ${badgeBg} flex items-center justify-center font-bold text-xs shrink-0 shadow-sm`}
+                      >
+                        {badgeLabel}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[9px] uppercase font-bold text-outline block leading-none">
+                          {isOrigin ? 'Origin (Pickup)' : isDest ? 'Destination (Drop-off)' : `Stop ${idx}`}
+                        </span>
+                        <span className="text-xs font-bold text-on-surface truncate block">
+                          {wp.name}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Reorder and Delete Controls */}
+                    <div className="flex items-center gap-1 shrink-0 ml-1">
+                      {idx > 0 && (
+                        <button
+                          onClick={() => handleMoveWaypoint(idx, 'up')}
+                          title="Move Up"
+                          className="w-5 h-5 rounded hover:bg-surface-container-high text-on-surface-variant flex items-center justify-center text-xs cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">arrow_upward</span>
+                        </button>
+                      )}
+                      {idx < waypoints.length - 1 && (
+                        <button
+                          onClick={() => handleMoveWaypoint(idx, 'down')}
+                          title="Move Down"
+                          className="w-5 h-5 rounded hover:bg-surface-container-high text-on-surface-variant flex items-center justify-center text-xs cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">arrow_downward</span>
+                        </button>
+                      )}
+                      {waypoints.length > 2 && (
+                        <button
+                          onClick={() => handleRemoveWaypoint(idx)}
+                          title="Remove Stop"
+                          className="w-5 h-5 rounded hover:bg-error/20 text-error flex items-center justify-center text-xs cursor-pointer ml-0.5"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">delete</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Quick Corridor Presets Bar */}
           <div className="flex gap-1.5 overflow-x-auto pt-1 no-scrollbar">
@@ -262,7 +428,7 @@ export const MapStudio: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. Floating Bottom Telematics & Route Analytics Card */}
+      {/* 4. Floating Bottom Telematics & Multi-Stop Route Analytics Card */}
       <div className="absolute bottom-4 left-3 right-3 z-30 max-w-lg mx-auto">
         <div className="bg-surface/95 backdrop-blur-xl p-4 rounded-3xl shadow-2xl border border-white/60 flex flex-col gap-3">
           {/* Top Row: Path Metrics Grid */}
@@ -290,9 +456,9 @@ export const MapStudio: React.FC = () => {
             </div>
 
             <div className="bg-surface-container-lowest p-2 rounded-2xl border border-outline-variant/30">
-              <span className="text-[9px] font-bold text-outline uppercase block">Nodes</span>
+              <span className="text-[9px] font-bold text-outline uppercase block">Stops</span>
               <span className="text-sm font-extrabold text-secondary">
-                {routeResult ? `${routeResult.nodesExpanded}` : '--'}
+                {waypoints.length}
               </span>
             </div>
           </div>
@@ -303,7 +469,7 @@ export const MapStudio: React.FC = () => {
               <div className="flex items-center justify-between text-xs font-bold text-primary">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-primary animate-ping"></span>
-                  EV Shuttle In Transit: {simSpeed} km/h
+                  EV Shuttle Multi-Stop Run: {simSpeed} km/h
                 </span>
                 <span>{simProgressPct}% Completed</span>
               </div>
@@ -318,7 +484,7 @@ export const MapStudio: React.FC = () => {
             <div className="flex items-center justify-between px-1 text-xs">
               <div className="flex items-center gap-1.5 text-on-surface-variant font-medium">
                 <span className="material-symbols-outlined text-secondary text-[16px]">alt_route</span>
-                <span>Detour Filter:</span>
+                <span>Detour Radius:</span>
                 <span className="font-bold text-on-surface">{detourThresholdM}m</span>
               </div>
               <input
@@ -346,13 +512,15 @@ export const MapStudio: React.FC = () => {
               <span className="material-symbols-outlined text-[18px]">
                 {isSimulating ? 'pause_circle' : 'play_arrow'}
               </span>
-              <span>{isSimulating ? 'Pause Shuttle' : 'Simulate Shuttle Ride'}</span>
+              <span>{isSimulating ? 'Pause Shuttle' : 'Simulate Shuttle Run'}</span>
             </button>
 
             <button
               onClick={() => {
                 alert(
-                  `Corridor Confirmed!\nOrigin: ${originNode.name}\nDestination: ${destNode.name}\nDistance: ${(
+                  `Multi-Stop Corridor Confirmed!\nTotal Stops: ${waypoints.length}\nOrigin: ${
+                    waypoints[0].name
+                  }\nDestination: ${waypoints[waypoints.length - 1].name}\nDistance: ${(
                     (routeResult?.distanceMeters || 0) / 1000
                   ).toFixed(1)} km\nCO2 Saved: ${routeResult?.co2SavedKg} kg`
                 );
@@ -360,7 +528,7 @@ export const MapStudio: React.FC = () => {
               className="px-4 py-3 rounded-2xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-bold text-xs flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer"
             >
               <span className="material-symbols-outlined text-[18px]">bookmark_add</span>
-              <span>Select</span>
+              <span>Confirm</span>
             </button>
           </div>
         </div>
