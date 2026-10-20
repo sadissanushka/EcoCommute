@@ -1,0 +1,6 @@
+{
+  "origin": { "lat": 6.931298, "lng": 79.8423099 },
+  "destination": { "lat": 6.9302576, "lng": 79.8425214 },
+  "algorithm": "dijkstra",
+  "mode": "distance"
+}
