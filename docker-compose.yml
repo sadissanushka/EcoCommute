@@ -60,6 +60,40 @@ services:
     ports:
       - "8083:8083"
 
+  analytics-service:
+    build:
+      context: ./services/analytics
+      dockerfile: Dockerfile
+    container_name: shuttle_analytics_service
+    restart: unless-stopped
+    depends_on:
+      postgis:
+        condition: service_healthy
+    environment:
+      PORT: 8085
+      DATABASE_URL: postgres://postgres:postgres@postgis:5432/corporate_shuttle
+      DB_HOST: postgis
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: corporate_shuttle
+      NODE_ENV: production
+    ports:
+      - "8085:8085"
+
+  dashboards:
+    build:
+      context: ./apps/dashboards
+      dockerfile: Dockerfile
+    container_name: shuttle_dashboards
+    restart: unless-stopped
+    environment:
+      PORT: 3005
+      NEXT_PUBLIC_ANALYTICS_API_URL: http://analytics-service:8085
+      NODE_ENV: production
+    ports:
+      - "3005:3005"
+
 volumes:
   postgis_data:
     name: shuttle_postgis_data

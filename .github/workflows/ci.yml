@@ -90,6 +90,15 @@ jobs:
           npm run lint
           npm test
 
+      - name: Verify Analytics & Privacy Service
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/corporate_shuttle
+        run: |
+          cd services/analytics
+          npm ci
+          npm run lint
+          npm test
+
   docker-verify:
     name: Docker Compose Build Verification
     runs-on: ubuntu-latest
