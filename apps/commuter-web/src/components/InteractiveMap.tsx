@@ -9,7 +9,7 @@ interface InteractiveMapProps {
   onSelectNode: (node: RoadNode, type: 'origin' | 'dest') => void;
   selectionMode: 'origin' | 'dest';
   vehiclePosition: [number, number] | null;
-  vehicleHeading?: number;
+  baseMapType?: 'esri' | 'osm' | 'dark';
 }
 
 export const InteractiveMap: React.FC<InteractiveMapProps> = ({
@@ -19,9 +19,11 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   onSelectNode,
   selectionMode,
   vehiclePosition,
+  baseMapType = 'esri',
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
   const routePolylineRef = useRef<L.Polyline | null>(null);
   const casingPolylineRef = useRef<L.Polyline | null>(null);
   const originMarkerRef = useRef<L.Marker | null>(null);
@@ -72,11 +74,31 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       zoomControl: false,
     });
 
-    // Clean free vector tiles (CartoDB Voyager / OSM tiles)
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap',
+    // Clean, free vector-style tiles with ZERO watermarks (ESRI & OSM)
+    const getTileUrl = (type: 'esri' | 'osm' | 'dark') => {
+      switch (type) {
+        case 'osm':
+          return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+        case 'dark':
+          return 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+        case 'esri':
+        default:
+          return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
+      }
+    };
+
+    const getAttribution = (type: 'esri' | 'osm' | 'dark') => {
+      if (type === 'osm') {
+        return '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors';
+      }
+      return 'Tiles &copy; Esri &mdash; StreetMap &amp; OpenStreetMap contributors';
+    };
+
+    const tile = L.tileLayer(getTileUrl(baseMapType), {
+      attribution: getAttribution(baseMapType),
       maxZoom: 19,
     }).addTo(map);
+    tileLayerRef.current = tile;
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
@@ -113,6 +135,42 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       mapInstanceRef.current = null;
     };
   }, []);
+
+  // Dynamic Tile Layer Switcher
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    if (tileLayerRef.current) {
+      tileLayerRef.current.remove();
+    }
+
+    const getTileUrl = (type: 'esri' | 'osm' | 'dark') => {
+      switch (type) {
+        case 'osm':
+          return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+        case 'dark':
+          return 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+        case 'esri':
+        default:
+          return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
+      }
+    };
+
+    const getAttribution = (type: 'esri' | 'osm' | 'dark') => {
+      if (type === 'osm') {
+        return '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors';
+      }
+      return 'Tiles &copy; Esri &mdash; StreetMap &amp; OpenStreetMap contributors';
+    };
+
+    const tile = L.tileLayer(getTileUrl(baseMapType), {
+      attribution: getAttribution(baseMapType),
+      maxZoom: 19,
+    }).addTo(map);
+
+    tileLayerRef.current = tile;
+  }, [baseMapType]);
 
   // 2. Update Origin & Destination Markers
   useEffect(() => {

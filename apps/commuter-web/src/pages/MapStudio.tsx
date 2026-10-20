@@ -16,6 +16,7 @@ export const MapStudio: React.FC = () => {
   const [activePreset, setActivePreset] = useState<string>('corridor-1');
   const [selectionMode, setSelectionMode] = useState<'origin' | 'dest'>('dest');
   const [useAStar, setUseAStar] = useState<boolean>(true);
+  const [baseMapType, setBaseMapType] = useState<'esri' | 'osm' | 'dark'>('esri');
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
 
   // Simulation State
@@ -102,7 +103,7 @@ export const MapStudio: React.FC = () => {
           onSelectNode={handleSelectNodeFromMap}
           selectionMode={selectionMode}
           vehiclePosition={currentVehiclePos}
-          vehicleHeading={140}
+          baseMapType={baseMapType}
         />
       </div>
 
@@ -122,33 +123,61 @@ export const MapStudio: React.FC = () => {
                 </span>
               </div>
               <span className="text-[11px] text-on-surface-variant font-medium">
-                Colombo & Western Corridor Pathfinder
+                Colombo &amp; Western Corridor
               </span>
             </div>
           </div>
 
-          {/* Algorithm Mode Switcher */}
-          <div className="flex items-center bg-surface-container-low p-1 rounded-xl border border-outline-variant/30">
-            <button
-              onClick={() => setUseAStar(true)}
-              className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                useAStar
-                  ? 'bg-primary text-on-primary shadow-sm'
-                  : 'text-on-surface-variant hover:text-on-surface'
-              }`}
-            >
-              A*
-            </button>
-            <button
-              onClick={() => setUseAStar(false)}
-              className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                !useAStar
-                  ? 'bg-primary text-on-primary shadow-sm'
-                  : 'text-on-surface-variant hover:text-on-surface'
-              }`}
-            >
-              Dijkstra
-            </button>
+          <div className="flex items-center gap-1.5">
+            {/* Tile Map Style Switcher (ESRI vs OSM vs Dark) */}
+            <div className="flex items-center bg-surface-container-low p-0.5 rounded-xl border border-outline-variant/30">
+              <button
+                onClick={() => setBaseMapType('esri')}
+                title="ESRI Clean Street Map (Zero Watermarks)"
+                className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  baseMapType === 'esri'
+                    ? 'bg-secondary text-on-secondary shadow-sm'
+                    : 'text-on-surface-variant hover:text-on-surface'
+                }`}
+              >
+                ESRI
+              </button>
+              <button
+                onClick={() => setBaseMapType('osm')}
+                title="OpenStreetMap Standard"
+                className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  baseMapType === 'osm'
+                    ? 'bg-secondary text-on-secondary shadow-sm'
+                    : 'text-on-surface-variant hover:text-on-surface'
+                }`}
+              >
+                OSM
+              </button>
+            </div>
+
+            {/* Algorithm Mode Switcher */}
+            <div className="flex items-center bg-surface-container-low p-0.5 rounded-xl border border-outline-variant/30">
+              <button
+                onClick={() => setUseAStar(true)}
+                className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  useAStar
+                    ? 'bg-primary text-on-primary shadow-sm'
+                    : 'text-on-surface-variant hover:text-on-surface'
+                }`}
+              >
+                A*
+              </button>
+              <button
+                onClick={() => setUseAStar(false)}
+                className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  !useAStar
+                    ? 'bg-primary text-on-primary shadow-sm'
+                    : 'text-on-surface-variant hover:text-on-surface'
+                }`}
+              >
+                Dijkstra
+              </button>
+            </div>
           </div>
         </div>
 
