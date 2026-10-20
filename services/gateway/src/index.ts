@@ -14,9 +14,9 @@ const PORT = process.env.PORT || 8080;
 const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://localhost:3001';
 const BOOKING_SERVICE_URL = process.env.BOOKING_SERVICE_URL || 'http://localhost:3002';
 const ROUTING_SERVICE_URL = process.env.ROUTING_SERVICE_URL || 'http://localhost:3000';
-const WALLET_SERVICE_URL = process.env.WALLET_SERVICE_URL || 'http://localhost:3003';
-const SAFETY_SERVICE_URL = process.env.SAFETY_SERVICE_URL || 'http://localhost:3004';
-const ANALYTICS_SERVICE_URL = process.env.ANALYTICS_SERVICE_URL || 'http://localhost:3005';
+const WALLET_SERVICE_URL = process.env.WALLET_SERVICE_URL || 'http://localhost:8083';
+const SAFETY_SERVICE_URL = process.env.SAFETY_SERVICE_URL || 'http://localhost:4400';
+const ANALYTICS_SERVICE_URL = process.env.ANALYTICS_SERVICE_URL || 'http://localhost:8085';
 
 // 1. Security Headers & CORS
 app.use(helmet());
@@ -137,9 +137,13 @@ app.use(
   })
 );
 
-// Placeholders for Wallet, Safety, Analytics
+// Microservices proxy routing: Wallet & Carbon, Safety & Real-time, Analytics
 app.use(['/wallet', '/api/v1/wallet'], buildProxy(WALLET_SERVICE_URL));
+app.use(['/carbon', '/api/v1/carbon'], buildProxy(WALLET_SERVICE_URL));
+app.use(['/fair-split', '/api/v1/fair-split'], buildProxy(WALLET_SERVICE_URL));
 app.use(['/safety', '/api/v1/safety'], buildProxy(SAFETY_SERVICE_URL));
+app.use(['/otp', '/api/v1/otp'], buildProxy(SAFETY_SERVICE_URL));
+app.use(['/sos', '/api/v1/sos'], buildProxy(SAFETY_SERVICE_URL));
 app.use(['/analytics', '/api/v1/analytics'], buildProxy(ANALYTICS_SERVICE_URL));
 
 // 7. Global 404 Fallback
