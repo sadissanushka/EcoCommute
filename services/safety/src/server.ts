@@ -7,17 +7,26 @@ import url from 'url';
 import { config } from './config';
 import { healthRouter } from './routes/health';
 import { ticketRouter, redeemTicket, verifyJwtToken } from './routes/ticket';
+import { otpRouter } from './routes/otp';
+import { sosRouter } from './routes/sos';
 import { AuthUser } from './types';
+import { handleWebSocketMessage } from './websocket/handler';
+import { roomManager } from './websocket/rooms';
 
 export const app = express();
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(express.json());
+app.use(express.static('public'));
 
 // Routes
 app.use('/', healthRouter);
 app.use('/safety', ticketRouter);
+app.use('/safety/otp', otpRouter);
+app.use('/otp', otpRouter);
+app.use('/safety/sos', sosRouter);
+app.use('/sos', sosRouter);
 
 export const server = http.createServer(app);
 
@@ -133,48 +142,14 @@ wss.on('connection', (ws: AuthenticatedSocket) => {
       return;
     }
 
-    try {
-      const msg = JSON.parse(data.toString());
-      if (msg.type === 'ping') {
-        ws.send(JSON.stringify({ v: 1, type: 'pong' }));
-        return;
-      }
-
-      if (msg.type === 'join' && msg.tripId) {
-        const roomName = `trip:${msg.tripId}`;
-        if (!rooms.has(roomName)) {
-          rooms.set(roomName, new Set());
-        }
-        rooms.get(roomName)!.add(ws);
-        ws.rooms.add(roomName);
-
-        ws.send(JSON.stringify({
-          v: 1,
-          type: 'joined',
-          tripId: msg.tripId,
-          userId: ws.user.id,
-          participants: [],
-        }));
-        return;
-      }
-    } catch {
-      ws.send(JSON.stringify({ v: 1, type: 'error', code: 'INVALID_JSON', message: 'Malformed JSON payload' }));
-    }
+    handleWebSocketMessage(ws as any, data);
   });
 
   ws.on('close', () => {
-    for (const roomName of ws.rooms) {
-      const roomSockets = rooms.get(roomName);
-      if (roomSockets) {
-        roomSockets.delete(ws);
-        if (roomSockets.size === 0) {
-          rooms.delete(roomName);
-        }
-      }
-    }
-    ws.rooms.clear();
+    roomManager.removeSocketFromAllRooms(ws as any);
   });
 });
+
 
 // Periodic Heartbeat check
 const heartbeatInterval = setInterval(() => {
