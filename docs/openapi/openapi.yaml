@@ -1,0 +1,751 @@
+openapi: 3.1.0
+info:
+  title: Corporate Employee Shuttle Platform API (Stack Kings - Group 05)
+  version: 1.0.0
+  description: >
+    Unified API Gateway specification for the Corporate Employee Shuttle Platform.
+    Managed by Chamara WPR (Module 2). Serves all module consumers (Mobile App shell,
+    Web Dashboards, Internal Service-to-Service).
+servers:
+  - url: http://localhost:8080
+    description: Local API Gateway Edge
+  - url: http://localhost:8080/api/v1
+    description: Local API Gateway Versioned Edge
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ==========================================================================
+  # AUTH SERVICE ENDPOINTS (Module 2 - Chamara)
+  # ==========================================================================
+  /auth/register:
+    post:
+      summary: Register a new user account
+      description: Creates user in core.users and initializes password hash in auth.credentials.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+        '400':
+          $ref: '#/components/responses/400ValidationError'
+        '409':
+          $ref: '#/components/responses/409ConflictError'
+
+  /auth/login:
+    post:
+      summary: Authenticate with email and password
+      description: Issues short-lived access JWT (15m) and rotating refresh token (7d).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Successfully authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+        '401':
+          $ref: '#/components/responses/401UnauthorizedError'
+        '429':
+          description: Account locked after multiple failed attempts (brute-force defense)
+
+  /auth/refresh:
+    post:
+      summary: Rotate refresh token and obtain fresh access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Tokens refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '401':
+          $ref: '#/components/responses/401UnauthorizedError'
+
+  /auth/logout:
+    post:
+      summary: Revoke refresh token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Logged out successfully
+
+  /auth/me:
+    get:
+      summary: Get current authenticated user profile
+      responses:
+        '200':
+          description: Profile retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/UserProfile'
+        '401':
+          $ref: '#/components/responses/401UnauthorizedError'
+
+  # ==========================================================================
+  # BOOKING SERVICE ENDPOINTS (Module 2 - Chamara)
+  # ==========================================================================
+  /trips:
+    get:
+      summary: Search available shuttle trips
+      parameters:
+        - name: origin
+          in: query
+          schema:
+            type: string
+          description: Filter by origin stop or hub name
+        - name: destination
+          in: query
+          schema:
+            type: string
+          description: Filter by destination stop or hub name
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Filter by departure date (YYYY-MM-DD)
+        - name: seatsNeeded
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 6
+            default: 1
+          description: Minimum available seats required
+      responses:
+        '200':
+          description: List of matching trips with server-computed availableSeats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  trips:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ShuttleTripSummary'
+    post:
+      summary: Schedule a new shuttle trip (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTripRequest'
+      responses:
+        '201':
+          description: Trip scheduled successfully
+        '400':
+          $ref: '#/components/responses/400ValidationError'
+        '403':
+          description: Admin privileges required
+
+  /trips/{id}:
+    get:
+      summary: Get detailed shuttle trip information and seat map
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Trip details with vehicle layout and seat availability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShuttleTripDetail'
+        '404':
+          $ref: '#/components/responses/404NotFoundError'
+    patch:
+      summary: Update trip status, timings, or vehicle/driver assignment (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [scheduled, boarding, in_progress, completed, cancelled]
+                driverId:
+                  type: integer
+                vehicleId:
+                  type: integer
+                departAt:
+                  type: string
+                  format: date-time
+                arriveAt:
+                  type: string
+                  format: date-time
+                bookingCutoffAt:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Trip updated
+        '403':
+          description: Admin role required
+
+  /trips/{id}/bookings:
+    post:
+      summary: Book seat(s) on a shuttle trip
+      description: Transactional booking with row-level locking, cutoff validation, party size enforcement (1-6), and duplicate check.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookingRequest'
+      responses:
+        '201':
+          description: Booking confirmed and seats assigned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingConfirmation'
+        '400':
+          $ref: '#/components/responses/400ValidationError'
+        '409':
+          $ref: '#/components/responses/409ConflictError'
+        '422':
+          description: Semantic idempotency payload mismatch
+
+  /bookings/me:
+    get:
+      summary: List all shuttle bookings for the authenticated user
+      responses:
+        '200':
+          description: User bookings retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bookings:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BookingDetail'
+
+  /bookings/{id}:
+    get:
+      summary: Get details of a specific booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Booking details retrieved
+        '403':
+          description: Forbidden - cannot view other user's booking
+        '404':
+          $ref: '#/components/responses/404NotFoundError'
+    delete:
+      summary: Cancel a confirmed booking and release seats
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Booking cancelled and seats released
+        '403':
+          description: Cannot cancel booking belonging to another user
+        '404':
+          $ref: '#/components/responses/404NotFoundError'
+
+  /vehicles:
+    get:
+      summary: List fleet vehicles and capacities
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vehicles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Vehicle'
+    post:
+      summary: Register a new vehicle in the fleet (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVehicleRequest'
+      responses:
+        '201':
+          description: Vehicle created
+
+  /vehicles/{id}:
+    patch:
+      summary: Update vehicle capacity, active status, or layout (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plateNo:
+                  type: string
+                type:
+                  type: string
+                capacity:
+                  type: integer
+                active:
+                  type: boolean
+      responses:
+        '200':
+          description: Vehicle updated
+
+  # ==========================================================================
+  # ROUTING SERVICE CONTRACT (Module 1 - Thisera)
+  # ==========================================================================
+  /route:
+    post:
+      summary: Compute shortest path and travel ETA
+      description: Dijkstra/A* routing over PostGIS graph network
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [origin, destination]
+              properties:
+                origin:
+                  $ref: '#/components/schemas/LatLng'
+                destination:
+                  $ref: '#/components/schemas/LatLng'
+                waypoints:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/LatLng'
+      responses:
+        '200':
+          description: Path calculated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  distanceM:
+                    type: number
+                  etaSeconds:
+                    type: number
+                  path:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LatLng'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Unique UUID token to enforce idempotent request handling
+      schema:
+        type: string
+        format: uuid
+    LimitParam:
+      name: limit
+      in: query
+      required: false
+      description: Maximum number of records to return
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+    CursorParam:
+      name: cursor
+      in: query
+      required: false
+      description: Pagination cursor token
+      schema:
+        type: string
+
+  responses:
+    400ValidationError:
+      description: Bad Request / Schema Validation Failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    401UnauthorizedError:
+      description: Missing or invalid authentication token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    404NotFoundError:
+      description: Requested resource does not exist
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    409ConflictError:
+      description: Resource conflict or constraint violation (e.g. duplicate booking, seat occupied, cutoff passed)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+              example: The payload failed schema validation
+            details:
+              type: object
+              additionalProperties: true
+
+    LatLng:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat:
+          type: number
+          example: 6.9271
+        lng:
+          type: number
+          example: 79.8612
+
+    RegisterRequest:
+      type: object
+      required: [email, password, fullName]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+        fullName:
+          type: string
+        role:
+          type: string
+          enum: [employee, driver, admin, policymaker]
+          default: employee
+        companyId:
+          type: integer
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    TokenPair:
+      type: object
+      required: [accessToken, refreshToken, tokenType, expiresIn]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        tokenType:
+          type: string
+          example: Bearer
+        expiresIn:
+          type: integer
+          example: 900
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        fullName:
+          type: string
+        role:
+          type: string
+        companyId:
+          type: integer
+        corporateVerified:
+          type: boolean
+        verified:
+          type: boolean
+
+    AuthSuccessResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/UserProfile'
+        tokens:
+          $ref: '#/components/schemas/TokenPair'
+
+    ShuttleTripSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        routeName:
+          type: string
+        originName:
+          type: string
+        destinationName:
+          type: string
+        departAt:
+          type: string
+          format: date-time
+        arriveAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+        availableSeats:
+          type: integer
+
+    ShuttleTripDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        routeName:
+          type: string
+        originName:
+          type: string
+        destinationName:
+          type: string
+        departAt:
+          type: string
+          format: date-time
+        arriveAt:
+          type: string
+          format: date-time
+        availableSeats:
+          type: integer
+        seats:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              label:
+                type: string
+              row:
+                type: integer
+              col:
+                type: integer
+              isWindow:
+                type: boolean
+              isAisle:
+                type: boolean
+              isAccessible:
+                type: boolean
+              isAvailable:
+                type: boolean
+
+    CreateTripRequest:
+      type: object
+      required: [routeId, vehicleId, departAt, arriveAt, bookingCutoffAt]
+      properties:
+        routeId:
+          type: integer
+        vehicleId:
+          type: integer
+        driverId:
+          type: integer
+        departAt:
+          type: string
+          format: date-time
+        arriveAt:
+          type: string
+          format: date-time
+        bookingCutoffAt:
+          type: string
+          format: date-time
+
+    CreateBookingRequest:
+      type: object
+      required: [partySize]
+      properties:
+        partySize:
+          type: integer
+          minimum: 1
+          maximum: 6
+        seatIds:
+          type: array
+          items:
+            type: integer
+
+    BookingConfirmation:
+      type: object
+      properties:
+        booking:
+          type: object
+          properties:
+            id:
+              type: integer
+            tripId:
+              type: integer
+            userId:
+              type: integer
+            partySize:
+              type: integer
+            status:
+              type: string
+            assignedSeatIds:
+              type: array
+              items:
+                type: integer
+            createdAt:
+              type: string
+              format: date-time
+
+    BookingDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        tripId:
+          type: integer
+        partySize:
+          type: integer
+        status:
+          type: string
+        departAt:
+          type: string
+          format: date-time
+        arriveAt:
+          type: string
+          format: date-time
+        routeName:
+          type: string
+        originName:
+          type: string
+        destinationName:
+          type: string
+        plateNo:
+          type: string
+        vehicleType:
+          type: string
+        seats:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              label:
+                type: string
+
+    Vehicle:
+      type: object
+      properties:
+        id:
+          type: integer
+        plateNo:
+          type: string
+        type:
+          type: string
+        capacity:
+          type: integer
+        active:
+          type: boolean
+
+    CreateVehicleRequest:
+      type: object
+      required: [plateNo, type, capacity]
+      properties:
+        plateNo:
+          type: string
+        type:
+          type: string
+        capacity:
+          type: integer

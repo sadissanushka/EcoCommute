@@ -1,0 +1,14 @@
+{
+  "name": "shuttle-admin",
+  "version": "1.0.0",
+  "description": "Shuttle Fleet & Trip Administration Dashboard",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "vite": "^6.2.0"
+  }
+}
