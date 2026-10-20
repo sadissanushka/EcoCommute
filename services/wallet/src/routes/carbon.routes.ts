@@ -18,7 +18,10 @@ carbonRouter.get('/factors', async (_req: Request, res: Response) => {
   try {
     const dbFactors = await pool.query(`
       SELECT ef.id, ft.code AS "fuelCode", ft.name AS "fuelName",
-             ef.kg_co2e_per_litre AS "kgCo2ePerLitre", ef.kg_co2e_per_km AS "kgCo2ePerKm",
+             ef.kg_co2e_per_litre AS "kgCo2ePerLitre",
+             ef.kg_co2e_per_litre AS "kg_co2e_per_litre",
+             ef.kg_co2e_per_km AS "kgCo2ePerKm",
+             ef.kg_co2e_per_km AS "kg_co2e_per_km",
              ef.source, ef.source_year AS "sourceYear", ef.region
       FROM wallet.emission_factors ef
       JOIN wallet.fuel_types ft ON ft.id = ef.fuel_type_id
@@ -34,7 +37,13 @@ carbonRouter.get('/factors', async (_req: Request, res: Response) => {
     res.json({
       data: Object.entries(DEFRA_2024_FACTORS).map(([code, config]) => ({
         fuelCode: code,
-        ...config,
+        kgCo2ePerLitre: (config as any).kg_co2e_per_litre,
+        kg_co2e_per_litre: (config as any).kg_co2e_per_litre,
+        kgCo2ePerKm: (config as any).kg_co2e_per_km,
+        kg_co2e_per_km: (config as any).kg_co2e_per_km,
+        source: config.source,
+        sourceYear: config.year,
+        region: 'GLOBAL',
       })),
     });
   } catch (err: any) {
@@ -42,7 +51,13 @@ carbonRouter.get('/factors', async (_req: Request, res: Response) => {
     res.json({
       data: Object.entries(DEFRA_2024_FACTORS).map(([code, config]) => ({
         fuelCode: code,
-        ...config,
+        kgCo2ePerLitre: (config as any).kg_co2e_per_litre,
+        kg_co2e_per_litre: (config as any).kg_co2e_per_litre,
+        kgCo2ePerKm: (config as any).kg_co2e_per_km,
+        kg_co2e_per_km: (config as any).kg_co2e_per_km,
+        source: config.source,
+        sourceYear: config.year,
+        region: 'GLOBAL',
       })),
     });
   }
@@ -58,6 +73,7 @@ carbonRouter.get('/prices', async (_req: Request, res: Response) => {
       SELECT DISTINCT ON (ft.code)
              ft.code AS "fuelCode", ft.name AS "fuelName",
              fp.price_minor_per_litre AS "priceMinorPerLitre",
+             fp.price_minor_per_litre AS "price_minor_per_litre",
              (fp.price_minor_per_litre / 100.0)::NUMERIC(10,2) AS "priceLkrPerLitre",
              fp.effective_from AS "effectiveFrom", fp.source
       FROM wallet.fuel_prices fp
@@ -73,17 +89,17 @@ carbonRouter.get('/prices', async (_req: Request, res: Response) => {
     // Default Ceylon Petroleum Corporation (CPC) benchmark prices
     res.json({
       data: [
-        { fuelCode: 'PETROL_92', priceMinorPerLitre: 33200, priceLkrPerLitre: 332.0, source: 'CPC 2026' },
-        { fuelCode: 'AUTO_DIESEL', priceMinorPerLitre: 30700, priceLkrPerLitre: 307.0, source: 'CPC 2026' },
-        { fuelCode: 'HYBRID', priceMinorPerLitre: 33200, priceLkrPerLitre: 332.0, source: 'CPC 2026' },
-        { fuelCode: 'ELECTRIC', priceMinorPerLitre: 8000, priceLkrPerLitre: 80.0, source: 'CEB Commercial Tier' },
+        { fuelCode: 'PETROL_92', priceMinorPerLitre: 33200, price_minor_per_litre: 33200, priceLkrPerLitre: 332.0, source: 'CPC 2026' },
+        { fuelCode: 'AUTO_DIESEL', priceMinorPerLitre: 30700, price_minor_per_litre: 30700, priceLkrPerLitre: 307.0, source: 'CPC 2026' },
+        { fuelCode: 'HYBRID', priceMinorPerLitre: 33200, price_minor_per_litre: 33200, priceLkrPerLitre: 332.0, source: 'CPC 2026' },
+        { fuelCode: 'ELECTRIC', priceMinorPerLitre: 8000, price_minor_per_litre: 8000, priceLkrPerLitre: 80.0, source: 'CEB Commercial Tier' },
       ],
     });
   } catch (err: any) {
     res.json({
       data: [
-        { fuelCode: 'PETROL_92', priceMinorPerLitre: 33200, priceLkrPerLitre: 332.0, source: 'CPC 2026' },
-        { fuelCode: 'AUTO_DIESEL', priceMinorPerLitre: 30700, priceLkrPerLitre: 307.0, source: 'CPC 2026' },
+        { fuelCode: 'PETROL_92', priceMinorPerLitre: 33200, price_minor_per_litre: 33200, priceLkrPerLitre: 332.0, source: 'CPC 2026' },
+        { fuelCode: 'AUTO_DIESEL', priceMinorPerLitre: 30700, price_minor_per_litre: 30700, priceLkrPerLitre: 307.0, source: 'CPC 2026' },
       ],
     });
   }

@@ -1,7 +1,12 @@
 import request from 'supertest';
 import { app } from '../src/index';
+import { pool } from '../src/db/pool';
 
 describe('Wallet & Carbon Service HTTP Endpoints', () => {
+  afterAll(async () => {
+    await pool.end();
+  });
+
   describe('GET /health', () => {
     it('returns healthy status and service info', async () => {
       const res = await request(app).get('/health');
@@ -20,7 +25,8 @@ describe('Wallet & Carbon Service HTTP Endpoints', () => {
 
       const petrolFactor = res.body.data.find((f: any) => f.fuelCode === 'PETROL_92');
       expect(petrolFactor).toBeDefined();
-      expect(petrolFactor.kg_co2e_per_litre).toBe(2.31495);
+      const factorValue = petrolFactor.kgCo2ePerLitre ?? petrolFactor.kg_co2e_per_litre;
+      expect(factorValue).toBe(2.31495);
     });
   });
 
