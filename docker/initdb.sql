@@ -330,3 +330,91 @@ BEGIN
   LIMIT 1;
 END;
 $$ LANGUAGE plpgsql;
+
+-- ============================================================================
+-- SAFETY SCHEMA (Amaraweera M4 - Tracking, Route Boundaries & Anomalies)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS safety.tracking_points (
+  id BIGSERIAL PRIMARY KEY,
+  trip_id BIGINT NOT NULL REFERENCES core.trips(id) ON DELETE CASCADE,
+  user_id BIGINT NOT NULL REFERENCES core.users(id) ON DELETE CASCADE,
+  geom GEOMETRY(Point, 4326) NOT NULL,
+  speed_mps REAL,
+  heading REAL,
+  accuracy_m REAL,
+  recorded_at TIMESTAMPTZ NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_tracking_points_geom ON safety.tracking_points USING GIST(geom);
+CREATE INDEX IF NOT EXISTS idx_tracking_points_trip_time ON safety.tracking_points (trip_id, recorded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tracking_points_user_time ON safety.tracking_points (user_id, recorded_at DESC);
+
+CREATE TABLE IF NOT EXISTS safety.route_boundaries (
+  trip_id BIGINT PRIMARY KEY REFERENCES core.trips(id) ON DELETE CASCADE,
+  geom GEOMETRY(LineString, 4326) NOT NULL,
+  mild_threshold_m INT NOT NULL DEFAULT 250,
+  severe_threshold_m INT NOT NULL DEFAULT 1000,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_route_boundaries_geom ON safety.route_boundaries USING GIST(geom);
+
+CREATE TABLE IF NOT EXISTS safety.sos_events (
+  id BIGSERIAL PRIMARY KEY,
+  trip_id BIGINT REFERENCES core.trips(id) ON DELETE SET NULL,
+  user_id BIGINT NOT NULL REFERENCES core.users(id) ON DELETE CASCADE,
+  trigger TEXT NOT NULL CHECK (trigger IN ('manual', 'auto_anomaly')),
+  geom GEOMETRY(Point, 4326),
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'acknowledged', 'resolved')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_at TIMESTAMPTZ,
+  resolved_by BIGINT REFERENCES core.users(id) ON DELETE SET NULL,
+  note TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sos_events_status ON safety.sos_events (status);
+CREATE INDEX IF NOT EXISTS idx_sos_events_trip ON safety.sos_events (trip_id);
+CREATE INDEX IF NOT EXISTS idx_sos_events_geom ON safety.sos_events USING GIST(geom);
+
+CREATE TABLE IF NOT EXISTS safety.anomaly_log (
+  id BIGSERIAL PRIMARY KEY,
+  trip_id BIGINT NOT NULL REFERENCES core.trips(id) ON DELETE CASCADE,
+  user_id BIGINT REFERENCES core.users(id) ON DELETE SET NULL,
+  level TEXT NOT NULL CHECK (level IN ('warning', 'admin_alert', 'auto_sos', 'stall', 'trip_end')),
+  distance_m REAL,
+  geom GEOMETRY(Point, 4326),
+  details JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_anomaly_log_trip_level ON safety.anomaly_log (trip_id, level);
+CREATE INDEX IF NOT EXISTS idx_anomaly_log_geom ON safety.anomaly_log USING GIST(geom);
+CREATE INDEX IF NOT EXISTS idx_anomaly_log_created ON safety.anomaly_log (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS safety.verified_users (
+  user_id BIGINT PRIMARY KEY REFERENCES core.users(id) ON DELETE CASCADE,
+  corporate_email CITEXT NOT NULL,
+  verified_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_verified_users_email ON safety.verified_users (corporate_email);
+
+CREATE TABLE IF NOT EXISTS safety.otp_requests (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT REFERENCES core.users(id) ON DELETE SET NULL,
+  email CITEXT NOT NULL,
+  otp_hash TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts INT NOT NULL DEFAULT 0,
+  consumed BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_otp_requests_email_active ON safety.otp_requests (email, consumed, expires_at);
+CREATE INDEX IF NOT EXISTS idx_otp_requests_user ON safety.otp_requests (user_id);
+
+CREATE TABLE IF NOT EXISTS safety.safety_preferences (
+  user_id BIGINT PRIMARY KEY REFERENCES core.users(id) ON DELETE CASCADE,
+  women_only BOOLEAN NOT NULL DEFAULT false,
+  emergency_contact_name TEXT,
+  emergency_contact_phone TEXT,
+  emergency_contact_email TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
