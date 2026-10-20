@@ -7,7 +7,6 @@ interface HomeProps {
   onNavigateToTracking: (tripId: number) => void;
   onNavigateToWallet: () => void;
   onNavigateToSos: () => void;
-  onLogout?: () => void;
 }
 
 export const Home: React.FC<HomeProps> = ({
@@ -16,34 +15,20 @@ export const Home: React.FC<HomeProps> = ({
   onNavigateToTracking,
   onNavigateToWallet,
   onNavigateToSos,
-  onLogout,
 }) => {
   const firstName = user?.fullName ? user.fullName.split(' ')[0] : 'Commuter';
 
   return (
     <div className="flex flex-col w-full max-w-md mx-auto px-4 pb-24 gap-4 font-sans">
       {/* Welcome Header Section */}
-      <section className="mt-2 flex items-center justify-between">
-        <div className="flex flex-col gap-0.5">
-          <h1 className="text-2xl font-bold text-on-surface tracking-tight">
-            Hello, {firstName}!
-          </h1>
-          <p className="text-xs text-on-surface-variant flex items-center gap-1.5 font-medium">
-            <span className="material-symbols-outlined text-primary text-[18px]">eco</span>
-            You've saved <span className="text-primary font-bold">12.4kg</span> of CO₂ this month with corporate transit.
-          </p>
-        </div>
-
-        {onLogout && (
-          <button
-            onClick={onLogout}
-            title="Sign out of your account"
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-outline-variant/30 text-on-surface-variant hover:text-error hover:border-error/40 hover:bg-error/5 text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95"
-          >
-            <span className="material-symbols-outlined text-[16px]">logout</span>
-            <span>Sign Out</span>
-          </button>
-        )}
+      <section className="mt-2 flex flex-col gap-0.5">
+        <h1 className="text-2xl font-bold text-on-surface tracking-tight">
+          Hello, {firstName}!
+        </h1>
+        <p className="text-xs text-on-surface-variant flex items-center gap-1.5 font-medium">
+          <span className="material-symbols-outlined text-primary text-[18px]">eco</span>
+          You've saved <span className="text-primary font-bold">12.4kg</span> of CO₂ this month with corporate transit.
+        </p>
       </section>
 
       {/* Next Ride Spotlight Card */}
@@ -179,29 +164,23 @@ export const Home: React.FC<HomeProps> = ({
         </div>
       </section>
 
-      {/* Employee Account & Sign Out Banner */}
+      {/* Employee Account Banner */}
       <section className="bg-surface-container-lowest p-3.5 rounded-xl border border-outline-variant/20 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs uppercase border border-primary/20">
-            {user?.fullName ? user.fullName.split(' ').map(n => n[0]).join('').slice(0, 2) : 'EM'}
+            {user?.fullName ? user.fullName.split(' ').map(n => n[0]).join('').slice(0, 2) : 'ST'}
           </div>
           <div>
-            <div className="text-xs font-bold text-on-surface">{user?.fullName || 'Anushka Thisera'}</div>
+            <div className="text-xs font-bold text-on-surface">{user?.fullName || 'Sarah Taylor'}</div>
             <div className="text-[11px] text-on-surface-variant truncate max-w-[200px]">
-              {user?.email || 'anushka.thisera@syscolabs.com'}
+              {user?.email || 'sarah.taylor@syscolabs.com'}
             </div>
           </div>
         </div>
 
-        {onLogout && (
-          <button
-            onClick={onLogout}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-container-high hover:bg-error/10 hover:text-error text-on-surface-variant text-xs font-bold transition-colors cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[15px]">logout</span>
-            <span>Logout</span>
-          </button>
-        )}
+        <span className="text-[10px] font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full uppercase tracking-wider">
+          Verified
+        </span>
       </section>
     </div>
   );

@@ -16,7 +16,6 @@ export const App: React.FC = () => {
     'map' | 'home' | 'seats' | 'tracking' | 'wallet' | 'sos' | 'login' | 'register'
   >('home');
   const [selectedTripId, setSelectedTripId] = useState<number>(1);
-  const [showProfileMenu, setShowProfileMenu] = useState<boolean>(false);
 
   // Authenticated User State
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -36,7 +35,6 @@ export const App: React.FC = () => {
   const handleLogout = () => {
     clearSession();
     setCurrentUser(null);
-    setShowProfileMenu(false);
     setViewMode('login');
   };
 
@@ -139,22 +137,21 @@ export const App: React.FC = () => {
             </span>
           </div>
 
-          {/* Right Header: Profile Avatar and Logout Button */}
-          <div className="relative flex items-center gap-2">
-            {/* Direct Log Out Button */}
+          {/* Right Header: Profile Avatar and Single Logout Button */}
+          <div className="flex items-center gap-2">
             <button
               onClick={handleLogout}
               title="Log out of account"
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-error hover:bg-error/10 hover:border-error/30 border border-transparent text-xs font-bold transition-all cursor-pointer active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-error hover:bg-error/10 hover:border-error/30 border border-error/20 text-xs font-bold transition-all cursor-pointer active:scale-95 shadow-sm"
             >
-              <span className="material-symbols-outlined text-[18px]">logout</span>
-              <span className="hidden sm:inline">Log Out</span>
+              <span className="material-symbols-outlined text-[17px]">logout</span>
+              <span>Log Out</span>
             </button>
 
             {/* Profile Avatar Pill */}
-            <button
-              onClick={() => setShowProfileMenu(!showProfileMenu)}
-              className="w-8 h-8 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs uppercase cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all"
+            <div
+              className="w-8 h-8 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs uppercase select-none"
+              title={currentUser?.fullName || 'User Profile'}
             >
               {currentUser?.fullName
                 ? currentUser.fullName
@@ -163,32 +160,7 @@ export const App: React.FC = () => {
                     .join('')
                     .slice(0, 2)
                 : 'AT'}
-            </button>
-
-            {/* Profile Dropdown Menu */}
-            {showProfileMenu && (
-              <div className="absolute top-11 right-0 w-56 bg-surface-container-lowest p-3 rounded-2xl shadow-2xl border border-outline-variant/30 flex flex-col gap-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                <div className="flex flex-col border-b border-outline-variant/20 pb-2">
-                  <span className="text-xs font-bold text-on-surface truncate">
-                    {currentUser?.fullName || 'Anushka Thisera'}
-                  </span>
-                  <span className="text-[10px] text-on-surface-variant truncate">
-                    {currentUser?.email || 'anushka.thisera@syscolabs.com'}
-                  </span>
-                  <span className="text-[9px] text-primary font-bold uppercase mt-1">
-                    Sysco LABS • Verified Employee
-                  </span>
-                </div>
-
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left text-xs font-bold text-error hover:bg-error/10 transition-colors cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[18px]">logout</span>
-                  <span>Log Out of Account</span>
-                </button>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       </header>
@@ -202,7 +174,6 @@ export const App: React.FC = () => {
             onNavigateToTracking={() => setViewMode('tracking')}
             onNavigateToWallet={() => setViewMode('wallet')}
             onNavigateToSos={() => setViewMode('sos')}
-            onLogout={handleLogout}
           />
         )}
 
