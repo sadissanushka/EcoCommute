@@ -1,0 +1,23 @@
+{
+  "name": "migration-tooling",
+  "version": "1.0.0",
+  "description": "Versioned database migration engine for Corporate Employee Shuttle Platform (Module 3)",
+  "main": "dist/runner.js",
+  "scripts": {
+    "migrate:up": "tsx src/runner.ts up",
+    "migrate:down": "tsx src/runner.ts down",
+    "migrate:status": "tsx src/runner.ts status",
+    "migrate:create": "tsx src/runner.ts create",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "pg": "^8.13.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "@types/pg": "^8.11.11",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
+}
