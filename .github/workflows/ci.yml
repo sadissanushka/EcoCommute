@@ -63,11 +63,29 @@ jobs:
         run: |
           test ! -f .env || (echo "ERROR: Raw .env file detected in repository!" && exit 1)
 
+      - name: Execute Migration Pipeline
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/corporate_shuttle
+        run: |
+          cd infra/migrations
+          npm ci
+          npm run migrate:up
+          npm run migrate:status
+
       - name: Verify Routing Engine Service
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/corporate_shuttle
         run: |
           cd services/routing-engine
+          npm ci
+          npm run lint
+          npm test
+
+      - name: Verify Wallet & Carbon Service
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/corporate_shuttle
+        run: |
+          cd services/wallet
           npm ci
           npm run lint
           npm test

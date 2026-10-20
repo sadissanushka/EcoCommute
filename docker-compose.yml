@@ -39,6 +39,27 @@ services:
     ports:
       - "3000:3000"
 
+  wallet-service:
+    build:
+      context: ./services/wallet
+      dockerfile: Dockerfile
+    container_name: shuttle_wallet_service
+    restart: unless-stopped
+    depends_on:
+      postgis:
+        condition: service_healthy
+    environment:
+      PORT: 8083
+      DATABASE_URL: postgres://postgres:postgres@postgis:5432/corporate_shuttle
+      DB_HOST: postgis
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: corporate_shuttle
+      NODE_ENV: production
+    ports:
+      - "8083:8083"
+
   analytics-service:
     build:
       context: ./services/analytics
