@@ -16,11 +16,13 @@ async function main() {
   if (isDbReady) {
     try {
       await graph.loadFromPostgres();
-    } catch (err) {
-      console.warn('[Graph] Could not load graph from PostGIS yet. Server will start with empty graph:', err);
+    } catch {
+      console.warn('[Graph] PostGIS load failed. Loading in-memory Colombo road network.');
+      graph.loadColomboSeedNetwork();
     }
   } else {
-    console.warn('[DB] PostgreSQL is not reachable at startup. Please ensure Docker container is running.');
+    console.warn('[DB] PostgreSQL is not reachable at startup. Loading in-memory Colombo road network for standalone operation.');
+    graph.loadColomboSeedNetwork();
   }
 
   const app = createServer(graph);
@@ -28,6 +30,8 @@ async function main() {
   app.listen(PORT, () => {
     console.log(`[Server] Routing engine listening on port ${PORT}`);
     console.log(`[Server] Health check: http://localhost:${PORT}/health`);
+    console.log(`[Server] Swagger Docs: http://localhost:${PORT}/docs`);
+    console.log(`[Server] Map View:     http://localhost:${PORT}/map`);
   });
 }
 

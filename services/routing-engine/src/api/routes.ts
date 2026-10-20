@@ -57,9 +57,9 @@ export function createRouter(graph: RoadGraph): Router {
     const { origin, destination, mode, algorithm } = parseResult.data;
 
     try {
-      // 1. Snap origin and destination to nearest nodes
-      const snappedOrigin = await RoadGraph.snapToNearestNode(origin);
-      const snappedDestination = await RoadGraph.snapToNearestNode(destination);
+      // 1. Snap origin and destination to nearest nodes (with in-memory fallback)
+      const snappedOrigin = await RoadGraph.snapToNearestNode(origin, graph);
+      const snappedDestination = await RoadGraph.snapToNearestNode(destination, graph);
 
       if (!snappedOrigin || !snappedDestination) {
         res.status(404).json({
@@ -109,36 +109,81 @@ export function createRouter(graph: RoadGraph): Router {
         FROM road_nodes;
       `);
 
-      const edgeFeatures = edgesQuery.rows.map((r) => ({
-        type: 'Feature',
-        geometry: JSON.parse(r.geojson),
-        properties: {
-          id: r.id,
-          distanceM: parseFloat(r.distance_m),
-          speedKmh: parseFloat(r.speed_kmh),
-          isOneway: r.is_oneway,
-        },
-      }));
+      if (edgesQuery.rows.length > 0) {
+        const edgeFeatures = edgesQuery.rows.map((r) => ({
+          type: 'Feature',
+          geometry: JSON.parse(r.geojson),
+          properties: {
+            id: r.id,
+            distanceM: parseFloat(r.distance_m),
+            speedKmh: parseFloat(r.speed_kmh),
+            isOneway: r.is_oneway,
+          },
+        }));
 
-      const nodeFeatures = nodesQuery.rows.map((r) => ({
-        type: 'Feature',
-        geometry: JSON.parse(r.geojson),
-        properties: { id: r.id },
-      }));
+        const nodeFeatures = nodesQuery.rows.map((r) => ({
+          type: 'Feature',
+          geometry: JSON.parse(r.geojson),
+          properties: { id: r.id },
+        }));
 
-      res.json({
-        type: 'FeatureCollection',
-        metadata: {
-          nodeCount: nodesQuery.rows.length,
-          edgeCount: edgesQuery.rows.length,
-          crs: 'EPSG:4326',
-        },
-        features: [...edgeFeatures, ...nodeFeatures],
-      });
-    } catch (err) {
-      console.error('[GeoJSON] Error generating GeoJSON:', err);
-      res.status(500).json({ error: 'Failed to generate graph GeoJSON' });
+        res.json({
+          type: 'FeatureCollection',
+          metadata: {
+            nodeCount: nodesQuery.rows.length,
+            edgeCount: edgesQuery.rows.length,
+            crs: 'EPSG:4326',
+          },
+          features: [...edgeFeatures, ...nodeFeatures],
+        });
+        return;
+      }
+    } catch {
+      // PostGIS not available, fall back to in-memory graph
     }
+
+    // In-memory GeoJSON generation
+    const nodeFeatures: any[] = [];
+    const edgeFeatures: any[] = [];
+
+    for (const [id, loc] of graph.nodes.entries()) {
+      nodeFeatures.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [loc.lng, loc.lat] },
+        properties: { id },
+      });
+      const neighbors = graph.getNeighbors(id);
+      for (const n of neighbors) {
+        const targetLoc = graph.getNode(n.targetNodeId);
+        if (targetLoc) {
+          edgeFeatures.push({
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [loc.lng, loc.lat],
+                [targetLoc.lng, targetLoc.lat],
+              ],
+            },
+            properties: {
+              distanceM: n.distanceM,
+              speedKmh: n.speedKmh,
+              isOneway: n.isOneway,
+            },
+          });
+        }
+      }
+    }
+
+    res.json({
+      type: 'FeatureCollection',
+      metadata: {
+        nodeCount: nodeFeatures.length,
+        edgeCount: edgeFeatures.length,
+        crs: 'EPSG:4326',
+      },
+      features: [...edgeFeatures, ...nodeFeatures],
+    });
   });
 
   // 4. OpenAPI Specification
