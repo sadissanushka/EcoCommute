@@ -8,13 +8,13 @@
 
 ## 1. Team Members & Module Assignment Matrix
 
-| Module | Core Responsibility | Assigned Lead | Student ID / Username | Commit Credentials |
+| Module | Core Responsibility | Assigned Lead | Student ID / Username | Individual Presentation Dossier |
 | :--- | :--- | :--- | :--- | :--- |
-| **Module 1** | **Ride Matching & Custom Navigation Engine** | Thisera W.S.S.A. | 244208R / `sadissanushka` | `sadissanushka <ssinindu@gmail.com>` |
-| **Module 2** | **Fleet & Intelligent Seat Booking** | Ruwan Jayawardena | `RuwanCoding` | `RuwanCoding <pasinduruwan76@gmail.com>` |
-| **Module 3** | **Corporate Commute Wallet & Carbon Accounting** | Sareefa Zainy | `12sareefazainy` | `12sareefazainy <12sareefazainy@gmail.com>` |
-| **Module 4** | **Real-Time Safety & Live Anomaly Telematics** | P. Amaraweera | `DbyDt22` | `DbyDt22 <pariamaraweera22@gmail.com>` |
-| **Module 5** | **Analytics, ESG Reporting & Privacy Engine** | Ashen Jeewantha | `AshenJ2003` | `ashjeewantha@gmail.com` |
+| **Module 1** | **Ride Matching & Custom Navigation Engine** | Thisera W.S.S.A. | 244208R / `sadissanushka` | [`Module1_Presentation_Dossier_Thisera_244208R.md`](file:///c:/Users/ASUS/Documents/dijatra_m1/Module1_Presentation_Dossier_Thisera_244208R.md) |
+| **Module 2** | **Fleet & Intelligent Seat Booking** | Chamara W.P.R. | 234250D / `RuwanCoding` | [`Module2_Presentation_Dossier_Chamara_234250D.md`](file:///c:/Users/ASUS/Documents/dijatra_m1/Module2_Presentation_Dossier_Chamara_234250D.md) |
+| **Module 3** | **Corporate Commute Wallet & Carbon Accounting** | Zainy T.N.S. | 244236B / `12sareefazainy` | [`Module3_Presentation_Dossier_Zainy_244236B.md`](file:///c:/Users/ASUS/Documents/dijatra_m1/Module3_Presentation_Dossier_Zainy_244236B.md) |
+| **Module 4** | **Real-Time Safety & Live Anomaly Telematics** | Amaraweera M.T.P. | 244015X / `DbyDt22` | [`Module4_Presentation_Dossier_Amaraweera_244015X.md`](file:///c:/Users/ASUS/Documents/dijatra_m1/Module4_Presentation_Dossier_Amaraweera_244015X.md) |
+| **Module 5** | **Analytics, ESG Reporting & Privacy Engine** | Kulapputhanthri A.J. | 244108K / `AshenJ2003` | [`Module5_Presentation_Dossier_Kulapputhanthri_244108K.md`](file:///c:/Users/ASUS/Documents/dijatra_m1/Module5_Presentation_Dossier_Kulapputhanthri_244108K.md) |
 
 ---
 
