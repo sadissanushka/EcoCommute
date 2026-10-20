@@ -1,39 +1,109 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MapStudio } from './pages/MapStudio';
 import { Home } from './pages/Home';
 import { SeatSelection } from './pages/SeatSelection';
 import { LiveTracking } from './pages/LiveTracking';
 import { EmergencySos } from './pages/EmergencySos';
 import { Wallet } from './pages/Wallet';
+import { Login } from './pages/Login';
+import { Register } from './pages/Register';
 import { User } from './types';
+import { getCachedUser, clearSession } from './api/client';
 
 export const App: React.FC = () => {
-  // Default directly into Map Studio for a clean, standalone React Map experience
-  const [viewMode, setViewMode] = useState<'map' | 'home' | 'seats' | 'tracking' | 'wallet' | 'sos'>('map');
+  // Navigation View State
+  const [viewMode, setViewMode] = useState<
+    'map' | 'home' | 'seats' | 'tracking' | 'wallet' | 'sos' | 'login' | 'register'
+  >('home');
   const [selectedTripId, setSelectedTripId] = useState<number>(1);
+  const [showProfileMenu, setShowProfileMenu] = useState<boolean>(false);
 
-  const demoUser: User = {
-    id: 1,
-    email: 'anushka.thisera@syscolabs.com',
-    fullName: 'Anushka Thisera',
-    companyId: 1,
-    companyName: 'Sysco LABS',
-    role: 'commuter',
-    verified: true,
+  // Authenticated User State
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    return (
+      getCachedUser() || {
+        id: 1,
+        email: 'anushka.thisera@syscolabs.com',
+        fullName: 'Anushka Thisera',
+        companyId: 1,
+        companyName: 'Sysco LABS',
+        role: 'commuter',
+        verified: true,
+      }
+    );
+  });
+
+  const handleLogout = () => {
+    clearSession();
+    setCurrentUser(null);
+    setShowProfileMenu(false);
+    setViewMode('login');
   };
 
-  // If on Map Studio (Primary Clean UI requested)
+  const handleLoginSuccess = (user: User) => {
+    setCurrentUser(user);
+    setViewMode('home');
+  };
+
+  // If on Login view
+  if (viewMode === 'login') {
+    return (
+      <div className="relative w-full min-h-screen bg-surface">
+        <div className="absolute top-4 left-4 z-50">
+          <button
+            onClick={() => {
+              setCurrentUser({
+                id: 1,
+                email: 'anushka.thisera@syscolabs.com',
+                fullName: 'Anushka Thisera',
+                companyId: 1,
+                companyName: 'Sysco LABS',
+                role: 'commuter',
+                verified: true,
+              });
+              setViewMode('home');
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-high/90 text-on-surface text-xs font-bold shadow hover:bg-surface-container-highest cursor-pointer transition-all"
+          >
+            <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+            <span>Back to Hub (Demo Mode)</span>
+          </button>
+        </div>
+        <Login onSuccess={handleLoginSuccess} onGoToRegister={() => setViewMode('register')} />
+      </div>
+    );
+  }
+
+  // If on Register view
+  if (viewMode === 'register') {
+    return (
+      <div className="relative w-full min-h-screen bg-surface">
+        <Register onSuccess={() => setViewMode('login')} onGoToLogin={() => setViewMode('login')} />
+      </div>
+    );
+  }
+
+  // If on Map Studio (Primary Clean UI)
   if (viewMode === 'map') {
     return (
       <div className="relative w-full h-screen overflow-hidden">
-        {/* Floating Switcher Pill (Top Right) */}
-        <div className="absolute top-3.5 right-4 z-40">
+        {/* Floating Switcher Pill & Logout in Map Studio (Top Right) */}
+        <div className="absolute top-3.5 right-4 z-40 flex items-center gap-2">
           <button
             onClick={() => setViewMode('home')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-lowest/90 backdrop-blur-md text-on-surface shadow-lg border border-outline-variant/30 text-xs font-bold hover:bg-surface-container active:scale-95 transition-all cursor-pointer"
           >
             <span className="material-symbols-outlined text-[16px] text-primary">dashboard</span>
             <span>Commuter Hub</span>
+          </button>
+
+          <button
+            onClick={handleLogout}
+            title="Log Out"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-surface-container-lowest/90 backdrop-blur-md text-error shadow-lg border border-error/20 text-xs font-bold hover:bg-error/10 active:scale-95 transition-all cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[16px]">logout</span>
+            <span>Log Out</span>
           </button>
         </div>
 
@@ -45,13 +115,13 @@ export const App: React.FC = () => {
   // Commuter Hub and Auxiliary Flows
   return (
     <div className="min-h-screen bg-surface flex flex-col font-sans">
-      {/* Header */}
+      {/* Header with Map Studio and User Logout */}
       <header className="fixed top-0 w-full z-40 bg-surface/85 backdrop-blur-xl pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.04)] border-b border-surface-container-high/50">
         <div className="h-16 px-4 flex items-center justify-between max-w-lg mx-auto">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setViewMode('map')}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary text-on-primary text-xs font-bold shadow-sm hover:bg-primary-container cursor-pointer"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary text-on-primary text-xs font-bold shadow-sm hover:bg-primary-container cursor-pointer transition-all"
             >
               <span className="material-symbols-outlined text-[18px]">map</span>
               <span>Map Studio</span>
@@ -69,22 +139,70 @@ export const App: React.FC = () => {
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs uppercase">
-              AT
-            </div>
+          {/* Right Header: Profile Avatar and Logout Button */}
+          <div className="relative flex items-center gap-2">
+            {/* Direct Log Out Button */}
+            <button
+              onClick={handleLogout}
+              title="Log out of account"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-error hover:bg-error/10 hover:border-error/30 border border-transparent text-xs font-bold transition-all cursor-pointer active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[18px]">logout</span>
+              <span className="hidden sm:inline">Log Out</span>
+            </button>
+
+            {/* Profile Avatar Pill */}
+            <button
+              onClick={() => setShowProfileMenu(!showProfileMenu)}
+              className="w-8 h-8 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs uppercase cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all"
+            >
+              {currentUser?.fullName
+                ? currentUser.fullName
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .slice(0, 2)
+                : 'AT'}
+            </button>
+
+            {/* Profile Dropdown Menu */}
+            {showProfileMenu && (
+              <div className="absolute top-11 right-0 w-56 bg-surface-container-lowest p-3 rounded-2xl shadow-2xl border border-outline-variant/30 flex flex-col gap-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                <div className="flex flex-col border-b border-outline-variant/20 pb-2">
+                  <span className="text-xs font-bold text-on-surface truncate">
+                    {currentUser?.fullName || 'Anushka Thisera'}
+                  </span>
+                  <span className="text-[10px] text-on-surface-variant truncate">
+                    {currentUser?.email || 'anushka.thisera@syscolabs.com'}
+                  </span>
+                  <span className="text-[9px] text-primary font-bold uppercase mt-1">
+                    Sysco LABS • Verified Employee
+                  </span>
+                </div>
+
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left text-xs font-bold text-error hover:bg-error/10 transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">logout</span>
+                  <span>Log Out of Account</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
 
+      {/* Main Page Body */}
       <div className="pt-16 pb-20 flex-1 flex flex-col">
         {viewMode === 'home' && (
           <Home
-            user={demoUser}
+            user={currentUser}
             onNavigateToBook={() => setViewMode('map')}
             onNavigateToTracking={() => setViewMode('tracking')}
             onNavigateToWallet={() => setViewMode('wallet')}
             onNavigateToSos={() => setViewMode('sos')}
+            onLogout={handleLogout}
           />
         )}
 
