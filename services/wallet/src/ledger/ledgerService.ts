@@ -316,7 +316,7 @@ export class LedgerService {
         idempotencyKey: `trip:${tripId}:settle:driver:${driverUserId}`,
       });
 
-      const txnId = `trip-settle-${tripId}`;
+      const txnId = uuidv4();
       const res = await this.postTransaction({ txnId, legs });
 
       return {

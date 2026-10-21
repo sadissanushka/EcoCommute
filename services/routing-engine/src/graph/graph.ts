@@ -76,6 +76,7 @@ export class RoadGraph {
    * If PostGIS is unavailable, loads realistic Colombo arterial network.
    */
   public async loadFromPostgres(): Promise<void> {
+    seedColomboNetworkIntoGraph(this);
     try {
       console.log('[Graph] Attempting to load nodes from PostGIS...');
       const nodesRes = await pool.query(`
@@ -123,7 +124,31 @@ export class RoadGraph {
   public static async snapToNearestNode(point: LatLng, graphInstance?: RoadGraph): Promise<SnappedPoint | null> {
     const targetGraph = graphInstance || RoadGraph.activeInstance;
 
-    // 1. Try PostGIS KNN if available
+    // 1. In-Memory KNN Snap using Haversine Distance if targetGraph is populated
+    if (targetGraph && targetGraph.nodes.size > 0) {
+      let closestNodeId: string | null = null;
+      let closestLocation: LatLng = { lat: 0, lng: 0 };
+      let minDistanceM = Infinity;
+
+      for (const [nodeId, location] of targetGraph.nodes.entries()) {
+        const dist = haversineDistanceMeters(point, location);
+        if (dist < minDistanceM) {
+          minDistanceM = dist;
+          closestNodeId = nodeId;
+          closestLocation = location;
+        }
+      }
+
+      if (closestNodeId) {
+        return {
+          nodeId: closestNodeId,
+          distanceM: Math.round(minDistanceM),
+          location: closestLocation,
+        };
+      }
+    }
+
+    // 2. Try PostGIS KNN if targetGraph is not populated
     try {
       const res = await pool.query(
         `SELECT * FROM snap_to_nearest_road_node($1, $2);`,
@@ -138,8 +163,9 @@ export class RoadGraph {
         );
         if (geomRes.rows.length > 0) {
           const geomRow = geomRes.rows[0];
+          const nodeId = String(row.node_id);
           return {
-            nodeId: String(row.node_id),
+            nodeId,
             distanceM: parseFloat(row.distance_m),
             location: {
               lat: parseFloat(geomRow.lat),
@@ -149,33 +175,7 @@ export class RoadGraph {
         }
       }
     } catch {
-      // PostGIS query failed or DB disconnected; fall through to in-memory spatial snap
-    }
-
-    // 2. In-Memory KNN Snap Fallback using Haversine Distance
-    if (!targetGraph || targetGraph.nodes.size === 0) {
-      return null;
-    }
-
-    let closestNodeId: string | null = null;
-    let closestLocation: LatLng = { lat: 0, lng: 0 };
-    let minDistanceM = Infinity;
-
-    for (const [nodeId, location] of targetGraph.nodes.entries()) {
-      const dist = haversineDistanceMeters(point, location);
-      if (dist < minDistanceM) {
-        minDistanceM = dist;
-        closestNodeId = nodeId;
-        closestLocation = location;
-      }
-    }
-
-    if (closestNodeId) {
-      return {
-        nodeId: closestNodeId,
-        distanceM: Math.round(minDistanceM),
-        location: closestLocation,
-      };
+      // PostGIS query failed or DB disconnected
     }
 
     return null;

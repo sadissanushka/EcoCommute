@@ -792,7 +792,7 @@ bookingRouter.get('/bookings/:id', requireAuth, async (req: Request, res: Respon
     }
 
     const booking = result.rows[0];
-    if (!isAdmin && booking.user_id !== userId) {
+    if (!isAdmin && Number(booking.user_id) !== Number(userId)) {
       res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied to this booking', details: {} } });
       return;
     }
@@ -833,7 +833,7 @@ bookingRouter.delete('/bookings/:id', requireAuth, async (req: Request, res: Res
 
     const booking = bookingRes.rows[0];
 
-    if (!isAdmin && booking.user_id !== userId) {
+    if (!isAdmin && Number(booking.user_id) !== Number(userId)) {
       await client.query('ROLLBACK');
       res.status(403).json({ error: { code: 'FORBIDDEN', message: 'You cannot cancel another user booking', details: {} } });
       return;

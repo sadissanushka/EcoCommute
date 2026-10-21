@@ -53,19 +53,19 @@ export class SosService {
     };
 
     try {
-      const pointSql = lat && lng ? `ST_SetSRID(ST_MakePoint($4, $3), 4326)` : `NULL`;
+      const pointSql = lat && lng ? `ST_SetSRID(ST_MakePoint($4, $5), 4326)` : `NULL`;
       const insertRes = await pool.query(
         `INSERT INTO safety.sos_events (trip_id, user_id, trigger, geom, note)
-         VALUES ($1, $2, $3, ${pointSql}, $5)
+         VALUES ($1, $2, $3, ${pointSql}, $6)
          RETURNING id, trip_id, user_id, trigger, status, created_at, note`,
-        [tripId, userId, trigger, lng, note]
+        [tripId, userId, trigger, lng, lat, note]
       );
       if (insertRes.rows.length > 0) {
         const row = insertRes.rows[0];
         event = {
-          id: row.id,
-          tripId: row.trip_id,
-          userId: row.user_id,
+          id: Number(row.id),
+          tripId: row.trip_id ? Number(row.trip_id) : null,
+          userId: Number(row.user_id),
           trigger: row.trigger,
           lat,
           lng,
@@ -144,9 +144,9 @@ export class SosService {
       if (res.rows.length > 0) {
         const row = res.rows[0];
         return {
-          id: row.id,
-          tripId: row.trip_id,
-          userId: row.user_id,
+          id: Number(row.id),
+          tripId: row.trip_id ? Number(row.trip_id) : null,
+          userId: Number(row.user_id),
           trigger: row.trigger,
           status: row.status,
           createdAt: row.created_at,
@@ -175,14 +175,14 @@ export class SosService {
       if (res.rows.length > 0) {
         const row = res.rows[0];
         return {
-          id: row.id,
-          tripId: row.trip_id,
-          userId: row.user_id,
+          id: Number(row.id),
+          tripId: row.trip_id ? Number(row.trip_id) : null,
+          userId: Number(row.user_id),
           trigger: row.trigger,
           status: row.status,
           createdAt: row.created_at,
           resolvedAt: row.resolved_at,
-          resolvedBy: row.resolved_by,
+          resolvedBy: row.resolved_by ? Number(row.resolved_by) : null,
           note: row.note,
         };
       }
@@ -208,9 +208,9 @@ export class SosService {
          ORDER BY created_at DESC`
       );
       return res.rows.map((row) => ({
-        id: row.id,
-        tripId: row.trip_id,
-        userId: row.user_id,
+        id: Number(row.id),
+        tripId: row.trip_id ? Number(row.trip_id) : null,
+        userId: Number(row.user_id),
         trigger: row.trigger,
         status: row.status,
         createdAt: row.created_at,
