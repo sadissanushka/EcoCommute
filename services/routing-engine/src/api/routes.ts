@@ -6,20 +6,21 @@ import { findShortestPathAStar } from '../routing/astar.js';
 import { pool } from '../graph/db.js';
 import { RouteOverlapMatcher } from '../matching/matcher.js';
 import { MultiStopOptimizer } from '../matching/multiStop.js';
+import { LatLng, RouteLegSummary } from '../types/index.js';
 
 export function createRouter(graph: RoadGraph): Router {
   const router = Router();
   const matcher = new RouteOverlapMatcher(2500); // 2.5 km detour threshold limit
 
+  const LatLngPointSchema = z.object({
+    lat: z.number().min(-90).max(90),
+    lng: z.number().min(-180).max(180),
+  });
+
   const RouteSchema = z.object({
-    origin: z.object({
-      lat: z.number().min(-90).max(90),
-      lng: z.number().min(-180).max(180),
-    }),
-    destination: z.object({
-      lat: z.number().min(-90).max(90),
-      lng: z.number().min(-180).max(180),
-    }),
+    origin: LatLngPointSchema,
+    destination: LatLngPointSchema,
+    waypoints: z.array(LatLngPointSchema).optional(),
     mode: z.enum(['distance', 'time']).optional().default('distance'),
     algorithm: z.enum(['dijkstra', 'astar']).optional().default('dijkstra'),
   });
@@ -77,7 +78,7 @@ export function createRouter(graph: RoadGraph): Router {
     });
   });
 
-  // 2. /route endpoint (Cost Oracle — Step 1.4)
+  // 2. /route endpoint (Cost Oracle — Step 1.4 & Contract C1 Multi-Waypoint Support)
   router.post('/route', async (req: Request, res: Response) => {
     const parseResult = RouteSchema.safeParse(req.body);
     if (!parseResult.success) {
@@ -88,43 +89,78 @@ export function createRouter(graph: RoadGraph): Router {
       return;
     }
 
-    const { origin, destination, mode, algorithm } = parseResult.data;
+    const { origin, destination, waypoints, mode, algorithm } = parseResult.data;
 
     try {
-      // Snap origin and destination to nearest nodes (PostGIS KNN or In-Memory Spatial)
-      const snappedOrigin = await RoadGraph.snapToNearestNode(origin, graph);
-      const snappedDestination = await RoadGraph.snapToNearestNode(destination, graph);
+      const sequencePoints: LatLng[] = [origin, ...(waypoints || []), destination];
+      const snappedPoints = await Promise.all(
+        sequencePoints.map((pt) => RoadGraph.snapToNearestNode(pt, graph))
+      );
 
-      if (!snappedOrigin || !snappedDestination) {
+      if (snappedPoints.some((s) => !s)) {
         res.status(404).json({
           error: 'Could not snap coordinates to road network. Make sure graph is loaded.',
         });
         return;
       }
 
-      // Run selected routing algorithm (Dijkstra or A*)
-      const routeResult =
-        algorithm === 'astar'
-          ? findShortestPathAStar(graph, snappedOrigin.nodeId, snappedDestination.nodeId, { mode })
-          : findShortestPathDijkstra(graph, snappedOrigin.nodeId, snappedDestination.nodeId, { mode });
+      const validSnapped = snappedPoints as NonNullable<(typeof snappedPoints)[0]>[];
+      let totalDistanceM = 0;
+      let totalEtaSeconds = 0;
+      let totalNodesExpanded = 0;
+      const combinedPath: LatLng[] = [];
+      const combinedNodePath: string[] = [];
+      const legs: RouteLegSummary[] = [];
 
-      if (!routeResult) {
-        res.status(404).json({
-          error: 'No path found between origin and destination in road network',
+      for (let i = 0; i < validSnapped.length - 1; i++) {
+        const fromSnap = validSnapped[i];
+        const toSnap = validSnapped[i + 1];
+
+        const legResult =
+          algorithm === 'astar'
+            ? findShortestPathAStar(graph, fromSnap.nodeId, toSnap.nodeId, { mode })
+            : findShortestPathDijkstra(graph, fromSnap.nodeId, toSnap.nodeId, { mode });
+
+        if (!legResult) {
+          res.status(404).json({
+            error: 'No path found between origin and destination in road network',
+          });
+          return;
+        }
+
+        totalDistanceM += legResult.distanceM;
+        totalEtaSeconds += legResult.etaSeconds;
+        totalNodesExpanded += legResult.nodesExpanded;
+
+        if (i === 0) {
+          combinedPath.push(...legResult.path);
+          combinedNodePath.push(...legResult.nodePath);
+        } else {
+          combinedPath.push(...legResult.path.slice(1));
+          combinedNodePath.push(...legResult.nodePath.slice(1));
+        }
+
+        legs.push({
+          from: sequencePoints[i],
+          to: sequencePoints[i + 1],
+          distanceM: legResult.distanceM,
+          etaSeconds: legResult.etaSeconds,
+          nodeCount: legResult.nodePath.length,
+          nodesExpanded: legResult.nodesExpanded,
         });
-        return;
       }
 
       res.json({
         algorithm,
         mode,
-        distanceM: routeResult.distanceM,
-        etaSeconds: routeResult.etaSeconds,
-        path: routeResult.path,
-        nodeCount: routeResult.nodePath.length,
-        nodesExpanded: routeResult.nodesExpanded,
-        snappedOrigin,
-        snappedDestination,
+        distanceM: Math.round(totalDistanceM * 100) / 100,
+        etaSeconds: Math.round(totalEtaSeconds * 100) / 100,
+        path: combinedPath,
+        nodeCount: combinedNodePath.length,
+        nodesExpanded: totalNodesExpanded,
+        snappedOrigin: validSnapped[0],
+        snappedDestination: validSnapped[validSnapped.length - 1],
+        ...(waypoints && waypoints.length > 0 ? { legs } : {}),
       });
     } catch (err) {
       console.error('[Route API] Error computing route:', err);
@@ -332,7 +368,7 @@ export function createRouter(graph: RoadGraph): Router {
         '/route': {
           post: {
             tags: ['Routing'],
-            summary: 'Compute optimal route between origin and destination',
+            summary: 'Compute optimal route between origin and destination (supports ordered waypoints)',
             description: 'Snaps GPS coordinates and computes optimal path using Dijkstra or A* search.',
             requestBody: {
               required: true,
@@ -351,6 +387,14 @@ export function createRouter(graph: RoadGraph): Router {
                         type: 'object',
                         properties: { lat: { type: 'number', example: 6.7969 }, lng: { type: 'number', example: 79.9018 } },
                         required: ['lat', 'lng'],
+                      },
+                      waypoints: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: { lat: { type: 'number' }, lng: { type: 'number' } },
+                          required: ['lat', 'lng'],
+                        },
                       },
                       mode: { type: 'string', enum: ['distance', 'time'], default: 'distance' },
                       algorithm: { type: 'string', enum: ['dijkstra', 'astar'], default: 'astar' },

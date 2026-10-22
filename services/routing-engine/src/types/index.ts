@@ -22,8 +22,18 @@ export interface RoadEdge {
 export interface RouteRequest {
   origin: LatLng;
   destination: LatLng;
+  waypoints?: LatLng[];
   mode?: 'distance' | 'time';
   algorithm?: 'dijkstra' | 'astar';
+}
+
+export interface RouteLegSummary {
+  from: LatLng;
+  to: LatLng;
+  distanceM: number;
+  etaSeconds: number;
+  nodeCount: number;
+  nodesExpanded: number;
 }
 
 export interface RouteResponse {
@@ -32,6 +42,7 @@ export interface RouteResponse {
   path: LatLng[];
   nodeCount?: number;
   nodesExpanded?: number;
+  legs?: RouteLegSummary[];
 }
 
 export interface SnappedPoint {
