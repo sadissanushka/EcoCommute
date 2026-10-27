@@ -37,16 +37,16 @@ SELECT setval('core.users_id_seq', (SELECT MAX(id) FROM core.users));
 -- Hash generated via bcrypt (cost 10): $2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi
 INSERT INTO auth.credentials (user_id, password_hash)
 VALUES
-  (1,  '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'),
-  (2,  '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'),
-  (3,  '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'),
-  (4,  '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'),
-  (5,  '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'),
-  (6,  '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'),
-  (7,  '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'),
-  (8,  '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'),
-  (9,  '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'),
-  (10, '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi')
+  (1,  '$2b$10$ok60C2fzOkDsOsfIR3dl1uCdNVzemKV7XzPSoZ.s.KdlLMyGJJjrW'),
+  (2,  '$2b$10$ok60C2fzOkDsOsfIR3dl1uCdNVzemKV7XzPSoZ.s.KdlLMyGJJjrW'),
+  (3,  '$2b$10$ok60C2fzOkDsOsfIR3dl1uCdNVzemKV7XzPSoZ.s.KdlLMyGJJjrW'),
+  (4,  '$2b$10$ok60C2fzOkDsOsfIR3dl1uCdNVzemKV7XzPSoZ.s.KdlLMyGJJjrW'),
+  (5,  '$2b$10$ok60C2fzOkDsOsfIR3dl1uCdNVzemKV7XzPSoZ.s.KdlLMyGJJjrW'),
+  (6,  '$2b$10$ok60C2fzOkDsOsfIR3dl1uCdNVzemKV7XzPSoZ.s.KdlLMyGJJjrW'),
+  (7,  '$2b$10$ok60C2fzOkDsOsfIR3dl1uCdNVzemKV7XzPSoZ.s.KdlLMyGJJjrW'),
+  (8,  '$2b$10$ok60C2fzOkDsOsfIR3dl1uCdNVzemKV7XzPSoZ.s.KdlLMyGJJjrW'),
+  (9,  '$2b$10$ok60C2fzOkDsOsfIR3dl1uCdNVzemKV7XzPSoZ.s.KdlLMyGJJjrW'),
+  (10, '$2b$10$ok60C2fzOkDsOsfIR3dl1uCdNVzemKV7XzPSoZ.s.KdlLMyGJJjrW')
 ON CONFLICT (user_id) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
 -- 4. Seed Vehicles (3 Vehicles)
