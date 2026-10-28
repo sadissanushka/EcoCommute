@@ -245,6 +245,18 @@ services:
     ports:
       - "3005:3005"
 
+  commuter-web:
+    build:
+      context: ./apps/commuter-web
+      dockerfile: Dockerfile
+    container_name: shuttle_commuter_web
+    restart: unless-stopped
+    depends_on:
+      gateway:
+        condition: service_started
+    ports:
+      - "5173:80"
+
 volumes:
   postgis_data:
     name: shuttle_postgis_data
