@@ -10,7 +10,7 @@ import { LatLng, RouteLegSummary } from '../types/index.js';
 
 export function createRouter(graph: RoadGraph): Router {
   const router = Router();
-  const matcher = new RouteOverlapMatcher(2500); // 2.5 km detour threshold limit
+  const matcher = new RouteOverlapMatcher(2500, graph); // 2.5 km detour threshold limit
 
   const LatLngPointSchema = z.object({
     lat: z.number().min(-90).max(90),
@@ -169,7 +169,7 @@ export function createRouter(graph: RoadGraph): Router {
   });
 
   // 3. /rides endpoint — Create & List Ride Offers and Requests (Step 3.4)
-  router.post('/rides', (req: Request, res: Response) => {
+  router.post('/rides', async (req: Request, res: Response) => {
     const parseResult = RideOfferSchema.safeParse(req.body);
     if (!parseResult.success) {
       res.status(400).json({ error: 'Invalid ride submission', details: parseResult.error.format() });
@@ -191,7 +191,7 @@ export function createRouter(graph: RoadGraph): Router {
         seatsAvailable: data.seats,
         vehicle: data.vehicle || 'Standard Vehicle',
       };
-      matcher.addOffer(offer);
+      await matcher.persistOfferToDb(offer);
       res.status(201).json({ message: 'Ride offer published successfully', data: offer });
     } else {
       const request = {
@@ -204,7 +204,7 @@ export function createRouter(graph: RoadGraph): Router {
         womenOnly: data.womenOnly,
         seatsNeeded: data.seats,
       };
-      matcher.addRequest(request);
+      await matcher.persistRequestToDb(request);
       res.status(201).json({ message: 'Ride request published successfully', data: request });
     }
   });
@@ -218,14 +218,24 @@ export function createRouter(graph: RoadGraph): Router {
 
   // 4. /matches endpoint — Ranked Candidate Matches with Detour Limit (Step 3.3 & 3.4)
   router.get('/matches', (req: Request, res: Response) => {
-    const { requestId, offerId } = req.query;
+    const { requestId, offerId, rideId, greedy } = req.query;
+    const targetRideId = (rideId || requestId) as string | undefined;
 
-    if (requestId) {
-      const matches = matcher.findMatchesForRequest(requestId as string);
+    if (targetRideId) {
+      const asRequest = matcher.findMatchesForRequest(targetRideId);
+      if (asRequest.length > 0 || matcher.getRequestById(targetRideId)) {
+        res.json({
+          requestId: targetRideId,
+          matchesCount: asRequest.length,
+          matches: asRequest,
+        });
+        return;
+      }
+      const asOffer = matcher.findMatchesForOffer(targetRideId);
       res.json({
-        requestId,
-        matchesCount: matches.length,
-        matches,
+        offerId: targetRideId,
+        matchesCount: asOffer.length,
+        matches: asOffer,
       });
       return;
     }
@@ -236,6 +246,16 @@ export function createRouter(graph: RoadGraph): Router {
         offerId,
         matchesCount: matches.length,
         matches,
+      });
+      return;
+    }
+
+    if (greedy === 'true') {
+      const selected = matcher.greedySelectAllMatches();
+      res.json({
+        strategy: 'greedy-overlap-selection',
+        matchesCount: selected.length,
+        matches: selected,
       });
       return;
     }
@@ -270,6 +290,29 @@ export function createRouter(graph: RoadGraph): Router {
     });
   });
 
+  // 4b. Confirm match & publish route_boundaries to Module 4 Safety (Contract C2)
+  router.post('/matches/confirm', async (req: Request, res: Response) => {
+    const { offerId, requestId, tripId } = req.body || {};
+    if (!offerId || !requestId) {
+      res.status(400).json({ error: 'Both offerId and requestId are required to confirm a match' });
+      return;
+    }
+
+    const result = await matcher.confirmMatch(offerId, requestId, tripId ? Number(tripId) : undefined);
+    if (!result) {
+      res.status(404).json({
+        error: 'Could not confirm match: offer/request not found or constraints violated',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      message: 'Match confirmed and planned route boundary published for Module 4 anomaly monitoring',
+      match: result.match,
+      routeBoundaryPublished: result.routeBoundaryPublished,
+    });
+  });
+
   // 5. /multi-stop/order endpoint — NN + 2-opt Tour Optimization (Step 3.1 & 3.2)
   router.post('/multi-stop/order', (req: Request, res: Response) => {
     const parseResult = MultiStopSchema.safeParse(req.body);
@@ -291,7 +334,7 @@ export function createRouter(graph: RoadGraph): Router {
       riderId: s.riderId,
     }));
 
-    const result = MultiStopOptimizer.optimizeMultiStopTour(originPoint, stopPoints, destPoint);
+    const result = MultiStopOptimizer.optimizeMultiStopTour(originPoint, stopPoints, destPoint, graph);
     res.json({
       algorithm: 'Nearest-Neighbour + 2-opt Heuristic',
       ...result,
