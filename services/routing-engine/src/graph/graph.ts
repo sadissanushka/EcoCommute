@@ -76,17 +76,22 @@ export class RoadGraph {
    * If PostGIS is unavailable, loads realistic Colombo arterial network.
    */
   public async loadFromPostgres(): Promise<void> {
-    seedColomboNetworkIntoGraph(this);
     try {
+      const edgeCountRes = await pool.query('SELECT COUNT(*)::int AS count FROM road_edges;');
+      if (Number(edgeCountRes.rows[0]?.count || 0) === 0) {
+        throw new Error('road_edges table is empty in PostgreSQL');
+      }
+
       console.log('[Graph] Attempting to load nodes from PostGIS...');
       const nodesRes = await pool.query(`
         SELECT id, ST_X(geom) as lng, ST_Y(geom) as lat FROM road_nodes;
       `);
-
       if (nodesRes.rows.length === 0) {
         throw new Error('road_nodes table is empty in PostgreSQL');
       }
 
+      this.nodes.clear();
+      this.adjacency.clear();
       for (const row of nodesRes.rows) {
         this.addNode({
           id: String(row.id),
@@ -95,7 +100,7 @@ export class RoadGraph {
         });
       }
 
-      console.log(`[Graph] Loaded ${this.nodes.size} nodes. Loading edges...`);
+      console.log(`[Graph] Loaded ${this.nodeCount} nodes. Loading edges...`);
       const edgesRes = await pool.query(`
         SELECT id, source, target, distance_m, speed_kmh, is_oneway FROM road_edges;
       `);
@@ -111,7 +116,9 @@ export class RoadGraph {
       }
       console.log(`[Graph] Graph ready: ${this.nodeCount} nodes, ${this.edgeCount} directed edges.`);
     } catch (err) {
-      console.warn('[Graph] PostGIS load unavailable or empty. Loading Colombo arterial seed network into memory...');
+      console.warn('[Graph] PostGIS load unavailable or empty. Loading Colombo arterial seed network into memory...', err);
+      this.nodes.clear();
+      this.adjacency.clear();
       seedColomboNetworkIntoGraph(this);
       console.log(`[Graph] In-memory graph ready: ${this.nodeCount} nodes, ${this.edgeCount} directed edges.`);
     }
