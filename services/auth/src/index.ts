@@ -15,7 +15,7 @@ app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 app.use(express.json());
 
 // Health check endpoint
-app.get('/health', async (_req: Request, res: Response) => {
+app.get(['/health', '/auth/health'], async (_req: Request, res: Response) => {
   try {
     const dbRes = await pool.query('SELECT 1 as alive');
     res.status(200).json({

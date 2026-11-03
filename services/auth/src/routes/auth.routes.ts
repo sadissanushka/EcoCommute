@@ -14,12 +14,14 @@ const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'super-secret-refre
 const JWT_REFRESH_EXPIRES_IN = (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as any;
 
 const registerSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email('Invalid email format'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  fullName: z.string().min(2),
+  fullName: z.string().min(2, 'Full name must be at least 2 characters'),
   role: z.enum(['employee', 'driver', 'admin', 'policymaker']).default('employee'),
   gender: z.string().optional(),
   companyId: z.number().int().positive().optional(),
+  workCode: z.string().optional(),
+  employeeId: z.string().optional(),
 });
 
 const loginSchema = z.object({
@@ -87,9 +89,22 @@ authRouter.post('/register', async (req: Request, res: Response) => {
       return;
     }
 
-    // Determine company from email domain if companyId not provided
+    // Validate company if companyId provided, or resolve from domain
     let resolvedCompanyId = companyId || null;
-    if (!resolvedCompanyId) {
+    if (resolvedCompanyId) {
+      const compCheck = await client.query('SELECT id, name FROM core.companies WHERE id = $1', [resolvedCompanyId]);
+      if (compCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        res.status(400).json({
+          error: {
+            code: 'INVALID_COMPANY',
+            message: 'The selected company does not exist or is not authorized',
+            details: { companyId: resolvedCompanyId },
+          },
+        });
+        return;
+      }
+    } else {
       const emailDomain = email.split('@')[1];
       const compRes = await client.query(
         'SELECT id FROM core.companies WHERE $1 = ANY(email_domains) LIMIT 1',
@@ -155,7 +170,7 @@ authRouter.post('/register', async (req: Request, res: Response) => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Failed to register user',
-        details: { error: err.message },
+        details: process.env.NODE_ENV === 'development' ? { error: err.message } : {},
       },
     });
   } finally {

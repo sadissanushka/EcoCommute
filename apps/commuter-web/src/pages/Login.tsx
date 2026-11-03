@@ -3,13 +3,20 @@ import { authApi } from '../api/client';
 import { User } from '../types';
 
 interface LoginProps {
+  initialEmail?: string;
+  registrationNotice?: string;
   onSuccess: (user: User) => void;
   onGoToRegister: () => void;
 }
 
-export const Login: React.FC<LoginProps> = ({ onSuccess, onGoToRegister }) => {
-  const [email, setEmail] = useState('sarah.taylor@syscolabs.com');
-  const [password, setPassword] = useState('CorpPass2026!');
+export const Login: React.FC<LoginProps> = ({
+  initialEmail,
+  registrationNotice,
+  onSuccess,
+  onGoToRegister,
+}) => {
+  const [email, setEmail] = useState(initialEmail || 'sarah.taylor@syscolabs.com');
+  const [password, setPassword] = useState(initialEmail ? '' : 'CorpPass2026!');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +76,14 @@ export const Login: React.FC<LoginProps> = ({ onSuccess, onGoToRegister }) => {
             <h1 className="text-2xl font-bold text-on-surface tracking-tight">Welcome back</h1>
             <p className="text-sm text-on-surface-variant mt-1">Empowering your sustainable journey.</p>
           </div>
+
+          {/* Registration Notice */}
+          {registrationNotice && (
+            <div className="mt-4 p-3.5 rounded-xl bg-emerald-50 text-emerald-800 text-xs flex items-center gap-2.5 border border-emerald-200">
+              <span className="material-symbols-outlined text-[18px] text-emerald-600">check_circle</span>
+              <span className="font-medium">{registrationNotice}</span>
+            </div>
+          )}
 
           {/* Error Message */}
           {error && (

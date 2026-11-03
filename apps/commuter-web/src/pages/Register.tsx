@@ -14,14 +14,15 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onGoToLogin }) =>
   const [workCode, setWorkCode] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [termsAccepted, setTermsAccepted] = useState(true);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   // Compute password strength (1 to 3)
   const getPasswordStrength = (pwd: string) => {
     let score = 0;
-    if (pwd.length >= 6) score++;
+    if (pwd.length >= 8) score++;
     if (pwd.length >= 8 && /[A-Z]/.test(pwd) && /[0-9]/.test(pwd)) score++;
     if (pwd.length >= 10 && /[^A-Za-z0-9]/.test(pwd)) score++;
     return score;
@@ -31,21 +32,44 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onGoToLogin }) =>
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!termsAccepted) {
-      setError('Please accept terms of service');
+    setError(null);
+    setSuccess(null);
+
+    if (!fullName.trim() || fullName.trim().length < 2) {
+      setError('Full name must be at least 2 characters');
       return;
     }
-    setError(null);
+
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Please enter a valid corporate email address');
+      return;
+    }
+
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters long');
+      return;
+    }
+
+    if (!termsAccepted) {
+      setError('You must accept the Terms of Service & Privacy Policy');
+      return;
+    }
+
     setLoading(true);
 
     try {
       const { user } = await authApi.register({
-        fullName,
-        email,
+        fullName: fullName.trim(),
+        email: email.trim().toLowerCase(),
         password,
-        companyId: parseInt(companyId, 10),
+        companyId: companyId ? parseInt(companyId, 10) : undefined,
+        workCode: workCode.trim() || undefined,
       });
-      onSuccess(user, email);
+
+      setSuccess(`Account registered successfully for ${user.email}! Redirecting to sign in...`);
+      setTimeout(() => {
+        onSuccess(user, email.trim().toLowerCase());
+      }, 1500);
     } catch (err: any) {
       setError(err.message || 'Registration failed. Corporate domain must be authorized.');
     } finally {
@@ -93,6 +117,13 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onGoToLogin }) =>
           <div className="mb-4 p-3 rounded-xl bg-error-container text-on-error-container text-xs flex items-center gap-2">
             <span className="material-symbols-outlined text-[18px]">error</span>
             <span>{error}</span>
+          </div>
+        )}
+
+        {success && (
+          <div className="mb-4 p-3.5 rounded-xl bg-emerald-50 text-emerald-800 text-xs flex items-center gap-2.5 border border-emerald-200 shadow-sm animate-fade-in">
+            <span className="material-symbols-outlined text-[20px] text-emerald-600">check_circle</span>
+            <span className="font-medium">{success}</span>
           </div>
         )}
 
@@ -208,9 +239,10 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onGoToLogin }) =>
                   id="reg-password"
                   type={showPassword ? 'text' : 'password'}
                   required
+                  minLength={8}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
+                  placeholder="At least 8 characters"
                   className="w-full bg-surface-container-low text-on-surface pl-11 pr-11 py-3 rounded-xl text-sm outline-none focus:bg-surface-container focus:ring-2 focus:ring-primary transition-all placeholder:text-outline"
                 />
                 <button
@@ -257,6 +289,7 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onGoToLogin }) =>
             <label className="flex items-start gap-2.5 mt-1 cursor-pointer select-none">
               <input
                 type="checkbox"
+                required
                 checked={termsAccepted}
                 onChange={(e) => setTermsAccepted(e.target.checked)}
                 className="mt-1 h-4 w-4 rounded accent-primary bg-surface-container-low cursor-pointer"
@@ -269,7 +302,7 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onGoToLogin }) =>
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !!success}
               className="w-full mt-2 py-3.5 px-6 rounded-2xl bg-primary text-on-primary text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:brightness-110 active:scale-[0.99] transition-all disabled:opacity-75 cursor-pointer"
             >
               {loading ? (
