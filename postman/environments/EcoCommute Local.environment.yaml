@@ -1,0 +1,34 @@
+name: EcoCommute Local
+values:
+  - key: baseUrl
+    value: 'http://localhost:8080'
+  - key: routingUrl
+    value: 'http://localhost:3000'
+  - key: authUrl
+    value: 'http://localhost:3001'
+  - key: bookingUrl
+    value: 'http://localhost:3002'
+  - key: walletUrl
+    value: 'http://localhost:8083'
+  - key: safetyUrl
+    value: 'http://localhost:4400'
+  - key: analyticsUrl
+    value: 'http://localhost:8085'
+  - key: employeeToken
+    value: ''
+  - key: adminToken
+    value: ''
+  - key: policymakerToken
+    value: ''
+  - key: registeredRefreshToken
+    value: ''
+  - key: createdVehicleId
+    value: ''
+  - key: createdTripId
+    value: ''
+  - key: createdBookingId
+    value: ''
+  - key: idempotencyKey
+    value: ''
+  - key: sosEventId
+    value: ''

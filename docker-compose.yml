@@ -141,7 +141,7 @@ services:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 6
       start_period: 120s
 
   safety-service:
@@ -245,6 +245,18 @@ services:
       NODE_ENV: production
     ports:
       - "3005:3005"
+
+  commuter-web:
+    build:
+      context: ./apps/commuter-web
+      dockerfile: Dockerfile
+    container_name: shuttle_commuter_web
+    restart: unless-stopped
+    depends_on:
+      gateway:
+        condition: service_started
+    ports:
+      - "5173:80"
 
 volumes:
   postgis_data:
