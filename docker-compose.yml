@@ -186,7 +186,7 @@ services:
       safety-service:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/healthz || exit 1"]
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1/healthz || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
