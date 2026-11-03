@@ -16,6 +16,7 @@ export const App: React.FC = () => {
     'map' | 'home' | 'seats' | 'tracking' | 'wallet' | 'sos' | 'login' | 'register'
   >('home');
   const [selectedTripId, setSelectedTripId] = useState<number>(1);
+  const [registrationNotice, setRegistrationNotice] = useState<{ email: string; message: string } | null>(null);
 
   // Authenticated User State
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -26,7 +27,7 @@ export const App: React.FC = () => {
         fullName: 'Anushka Thisera',
         companyId: 1,
         companyName: 'Sysco LABS',
-        role: 'commuter',
+        role: 'employee',
         verified: true,
       }
     );
@@ -56,7 +57,7 @@ export const App: React.FC = () => {
                 fullName: 'Anushka Thisera',
                 companyId: 1,
                 companyName: 'Sysco LABS',
-                role: 'commuter',
+                role: 'employee',
                 verified: true,
               });
               setViewMode('home');
@@ -67,7 +68,18 @@ export const App: React.FC = () => {
             <span>Back to Hub (Demo Mode)</span>
           </button>
         </div>
-        <Login onSuccess={handleLoginSuccess} onGoToRegister={() => setViewMode('register')} />
+        <Login
+          initialEmail={registrationNotice?.email}
+          registrationNotice={registrationNotice?.message}
+          onSuccess={(user) => {
+            setRegistrationNotice(null);
+            handleLoginSuccess(user);
+          }}
+          onGoToRegister={() => {
+            setRegistrationNotice(null);
+            setViewMode('register');
+          }}
+        />
       </div>
     );
   }
@@ -76,7 +88,16 @@ export const App: React.FC = () => {
   if (viewMode === 'register') {
     return (
       <div className="relative w-full min-h-screen bg-surface">
-        <Register onSuccess={() => setViewMode('login')} onGoToLogin={() => setViewMode('login')} />
+        <Register
+          onSuccess={(_user, registeredEmail) => {
+            setRegistrationNotice({
+              email: registeredEmail,
+              message: `Registration successful for ${registeredEmail}! Please sign in.`,
+            });
+            setViewMode('login');
+          }}
+          onGoToLogin={() => setViewMode('login')}
+        />
       </div>
     );
   }

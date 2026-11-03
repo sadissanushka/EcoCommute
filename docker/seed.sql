@@ -4,9 +4,13 @@
 -- Group 05 "Stack Kings" - Module 2 (Chamara WPR - 234250D)
 -- ============================================================================
 
--- 1. Seed Company
+-- 1. Seed Companies
 INSERT INTO core.companies (id, name, email_domains)
-VALUES (1, 'Sysco LABS Sri Lanka', ARRAY['syscolabs.com'])
+VALUES
+  (1, 'Sysco LABS Sri Lanka', ARRAY['syscolabs.com']),
+  (2, 'Virtusa Corporation', ARRAY['virtusa.com']),
+  (3, 'WSO2 Sri Lanka', ARRAY['wso2.com']),
+  (4, 'Dialog Axiata', ARRAY['dialog.lk', 'dialog.com'])
 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email_domains = EXCLUDED.email_domains;
 
 -- Reset sequence for companies

@@ -64,10 +64,15 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 // 5. Proxy Helper
-function buildProxy(target: string, pathRewriteRule?: Record<string, string>) {
+function buildProxy(
+  pathFilter: string | string[],
+  target: string,
+  pathRewriteRule?: Record<string, string>
+) {
   return createProxyMiddleware({
     target,
     changeOrigin: true,
+    pathFilter,
     pathRewrite: pathRewriteRule,
     on: {
       error: (err, _req, res) => {
@@ -91,60 +96,81 @@ function buildProxy(target: string, pathRewriteRule?: Record<string, string>) {
 
 // Auth Service (/auth, /api/v1/auth)
 app.use(
-  ['/auth', '/api/v1/auth'],
-  buildProxy(AUTH_SERVICE_URL, {
+  buildProxy(['/auth', '/api/v1/auth'], AUTH_SERVICE_URL, {
     '^/api/v1/auth': '/auth',
   })
 );
 
 // Booking Service (/trips, /bookings, /vehicles, /shuttle-routes)
 app.use(
-  ['/trips', '/api/v1/trips'],
-  buildProxy(BOOKING_SERVICE_URL, {
+  buildProxy(['/trips', '/api/v1/trips'], BOOKING_SERVICE_URL, {
     '^/api/v1/trips': '/trips',
   })
 );
 app.use(
-  ['/bookings', '/api/v1/bookings'],
-  buildProxy(BOOKING_SERVICE_URL, {
+  buildProxy(['/bookings', '/api/v1/bookings'], BOOKING_SERVICE_URL, {
     '^/api/v1/bookings': '/bookings',
   })
 );
 app.use(
-  ['/vehicles', '/api/v1/vehicles'],
-  buildProxy(BOOKING_SERVICE_URL, {
+  buildProxy(['/vehicles', '/api/v1/vehicles'], BOOKING_SERVICE_URL, {
     '^/api/v1/vehicles': '/vehicles',
   })
 );
 
 // Routing Service (/route, /rides, /matches)
 app.use(
-  ['/route', '/api/v1/route'],
-  buildProxy(ROUTING_SERVICE_URL, {
+  buildProxy(['/route', '/api/v1/route'], ROUTING_SERVICE_URL, {
     '^/api/v1/route': '/route',
   })
 );
 app.use(
-  ['/rides', '/api/v1/rides'],
-  buildProxy(ROUTING_SERVICE_URL, {
+  buildProxy(['/rides', '/api/v1/rides'], ROUTING_SERVICE_URL, {
     '^/api/v1/rides': '/rides',
   })
 );
 app.use(
-  ['/matches', '/api/v1/matches'],
-  buildProxy(ROUTING_SERVICE_URL, {
+  buildProxy(['/matches', '/api/v1/matches'], ROUTING_SERVICE_URL, {
     '^/api/v1/matches': '/matches',
   })
 );
 
 // Microservices proxy routing: Wallet & Carbon, Safety & Real-time, Analytics
-app.use(['/wallet', '/api/v1/wallet'], buildProxy(WALLET_SERVICE_URL));
-app.use(['/carbon', '/api/v1/carbon'], buildProxy(WALLET_SERVICE_URL));
-app.use(['/fair-split', '/api/v1/fair-split'], buildProxy(WALLET_SERVICE_URL));
-app.use(['/safety', '/api/v1/safety'], buildProxy(SAFETY_SERVICE_URL));
-app.use(['/otp', '/api/v1/otp'], buildProxy(SAFETY_SERVICE_URL));
-app.use(['/sos', '/api/v1/sos'], buildProxy(SAFETY_SERVICE_URL));
-app.use(['/analytics', '/api/v1/analytics'], buildProxy(ANALYTICS_SERVICE_URL));
+app.use(
+  buildProxy(['/wallet', '/api/v1/wallet'], WALLET_SERVICE_URL, {
+    '^/api/v1/wallet': '/wallet',
+  })
+);
+app.use(
+  buildProxy(['/carbon', '/api/v1/carbon'], WALLET_SERVICE_URL, {
+    '^/api/v1/carbon': '/carbon',
+  })
+);
+app.use(
+  buildProxy(['/fair-split', '/api/v1/fair-split'], WALLET_SERVICE_URL, {
+    '^/api/v1/fair-split': '/fair-split',
+  })
+);
+app.use(
+  buildProxy(['/safety', '/api/v1/safety'], SAFETY_SERVICE_URL, {
+    '^/api/v1/safety': '/safety',
+  })
+);
+app.use(
+  buildProxy(['/otp', '/api/v1/otp'], SAFETY_SERVICE_URL, {
+    '^/api/v1/otp': '/otp',
+  })
+);
+app.use(
+  buildProxy(['/sos', '/api/v1/sos'], SAFETY_SERVICE_URL, {
+    '^/api/v1/sos': '/sos',
+  })
+);
+app.use(
+  buildProxy(['/analytics', '/api/v1/analytics'], ANALYTICS_SERVICE_URL, {
+    '^/api/v1/analytics': '/analytics',
+  })
+);
 
 // 7. Global 404 Fallback
 app.use((_req: Request, res: Response) => {

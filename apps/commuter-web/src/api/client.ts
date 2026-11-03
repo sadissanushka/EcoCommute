@@ -1,6 +1,6 @@
 import { User, AuthTokens, ShuttleTrip, Booking, WalletBalance, Transaction, LiveVehicleTelemetry } from '../types';
 
-const API_BASE = '';
+const API_BASE = 'http://localhost:8080';
 
 function getAccessToken(): string | null {
   return localStorage.getItem('access_token');
@@ -41,95 +41,101 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
 
+  let res: Response;
   try {
-    const res = await fetch(url, {
+    res = await fetch(url, {
       ...options,
       headers,
     });
-
-    if (res.status === 401) {
-      // Clear token if expired
-      clearSession();
-    }
-
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(data?.error?.message || data?.message || `Request failed with status ${res.status}`);
-    }
-
-    return data as T;
   } catch (err: any) {
-    console.warn(`[API] ${options.method || 'GET'} ${path} error:`, err.message);
-    throw err;
+    console.warn(`[API] Network error connecting to ${url}:`, err.message);
+    throw new Error('Unable to connect to the server. Please verify the API Gateway is running.');
   }
+
+  if (res.status === 401) {
+    clearSession();
+  }
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    let message = data?.error?.message || data?.message;
+
+    // Extract validation details if available
+    if (data?.error?.details && typeof data.error.details === 'object') {
+      const fieldErrors = Object.entries(data.error.details)
+        .map(([field, errs]) => {
+          if (Array.isArray(errs)) {
+            return `${errs.join(', ')}`;
+          }
+          if (typeof errs === 'string' && errs.trim().length > 0) {
+            return `${errs}`;
+          }
+          return '';
+        })
+        .filter(Boolean);
+
+      if (fieldErrors.length > 0) {
+        message = fieldErrors.join('. ');
+      }
+    }
+
+    if (!message) {
+      if (res.status === 404) {
+        message = 'The requested service resource was not found.';
+      } else if (res.status === 502 || res.status === 503) {
+        message = 'Service temporarily unavailable. Please try again shortly.';
+      } else {
+        message = `Request failed with status ${res.status}`;
+      }
+    }
+
+    const errorObj = new Error(message);
+    (errorObj as any).code = data?.error?.code;
+    (errorObj as any).status = res.status;
+    (errorObj as any).details = data?.error?.details;
+    throw errorObj;
+  }
+
+  return data as T;
 }
 
 // 1. Auth Service API
 export const authApi = {
-  async login(email: string, password: string): Promise<{ user: User; tokens: AuthTokens }> {
-    try {
-      const res = await request<any>('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
+  async login(
+    email: string,
+    password: string
+  ): Promise<{ user: User; tokens: AuthTokens }> {
+    const res = await request<any>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
 
-      const user: User = {
-        id: res.user?.id || 1,
-        email: res.user?.email || email,
-        fullName: res.user?.fullName || res.user?.full_name || 'Sarah Taylor',
-        phone: res.user?.phone,
-        companyId: res.user?.companyId || res.user?.company_id || 1,
-        companyName: res.user?.companyName || 'Sysco LABS',
-        role: res.user?.role || 'commuter',
-        verified: true,
-      };
-
-      const tokens: AuthTokens = {
-        accessToken: res.tokens?.accessToken || res.tokens?.access_token || 'mock_jwt_token_for_phase1',
-        refreshToken: res.tokens?.refreshToken || res.tokens?.refresh_token || 'mock_refresh_token',
-      };
-
-      setTokens(tokens, user);
-      return { user, tokens };
-    } catch (err: any) {
-      console.warn('Backend Auth service unavailable, authenticating with corporate credentials:', err.message);
-      
-      // Validate corporate credentials locally if backend or gateway is offline
-      const domain = email.split('@')[1];
-      const validDomains = ['syscolabs.com', 'virtusa.com', 'wso2.com', 'dialog.lk', 'company.com'];
-      
-      if (!domain || !validDomains.includes(domain.toLowerCase())) {
-        throw new Error('Corporate email domain must be authorized (e.g. @syscolabs.com, @virtusa.com)');
-      }
-
-      if (!password || password.length < 6) {
-        throw new Error('Password must be at least 6 characters');
-      }
-
-      const namePart = email.split('@')[0].replace(/[._]/g, ' ');
-      const formattedName = namePart
-        .split(' ')
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(' ');
-
-      const fallbackUser: User = {
-        id: 1,
-        email,
-        fullName: formattedName || 'Sarah Taylor',
-        companyId: 1,
-        companyName: domain.includes('sysco') ? 'Sysco LABS' : 'Virtusa Corporation',
-        role: 'commuter',
-        verified: true,
-      };
-
-      const fallbackTokens: AuthTokens = {
-        accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.phase1_commuter_token',
-        refreshToken: 'phase1_refresh_token_2026',
-      };
-
-      setTokens(fallbackTokens, fallbackUser);
-      return { user: fallbackUser, tokens: fallbackTokens };
+    if (!res.user || !res.tokens) {
+      throw new Error('Invalid login response from server');
     }
+
+    const user: User = {
+      id: res.user.id,
+      email: res.user.email,
+      fullName: res.user.fullName || res.user.full_name,
+      phone: res.user.phone,
+      companyId: res.user.companyId ?? res.user.company_id,
+      companyName: res.user.companyName,
+      role: res.user.role,
+      verified: res.user.corporateVerified ?? res.user.verified ?? false,
+    };
+
+    const tokens: AuthTokens = {
+      accessToken: res.tokens.accessToken || res.tokens.access_token,
+      refreshToken: res.tokens.refreshToken || res.tokens.refresh_token,
+    };
+
+    if (!tokens.accessToken || !tokens.refreshToken) {
+      throw new Error('Authentication tokens were not returned by the server');
+    }
+
+    setTokens(tokens, user);
+    return { user, tokens };
   },
 
   async register(data: {
@@ -138,59 +144,56 @@ export const authApi = {
     password: string;
     companyId?: number;
     phone?: string;
+    workCode?: string;
   }): Promise<{ user: User; tokens: AuthTokens }> {
-    try {
-      const res = await request<any>('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({
-          fullName: data.fullName,
-          email: data.email,
-          password: data.password,
-          companyId: data.companyId || 1,
-          phone: data.phone || '+94 77 123 4567',
-          role: 'commuter',
-        }),
-      });
+    const payload: Record<string, any> = {
+      fullName: data.fullName,
+      email: data.email,
+      password: data.password,
+      role: 'employee',
+    };
 
-      const user: User = {
-        id: res.user?.id || 10,
-        email: data.email,
-        fullName: data.fullName,
-        companyId: data.companyId || 1,
-        role: 'commuter',
-        verified: false,
-      };
-
-      const tokens: AuthTokens = {
-        accessToken: res.tokens?.accessToken || res.tokens?.access_token || 'mock_reg_token',
-        refreshToken: res.tokens?.refreshToken || res.tokens?.refresh_token || 'mock_reg_refresh',
-      };
-
-      setTokens(tokens, user);
-      return { user, tokens };
-    } catch (err: any) {
-      console.warn('Backend Auth service unavailable, creating local corporate registration:', err.message);
-
-      const fallbackUser: User = {
-        id: Math.floor(Math.random() * 8000) + 1000,
-        email: data.email,
-        fullName: data.fullName,
-        companyId: data.companyId || 1,
-        companyName: 'Sysco LABS',
-        role: 'commuter',
-        verified: false,
-      };
-
-      const fallbackTokens: AuthTokens = {
-        accessToken: 'reg_token_phase1',
-        refreshToken: 'reg_refresh_phase1',
-      };
-
-      setTokens(fallbackTokens, fallbackUser);
-      return { user: fallbackUser, tokens: fallbackTokens };
+    if (data.companyId !== undefined) {
+      payload.companyId = data.companyId;
     }
-  },
+    if (data.workCode) {
+      payload.workCode = data.workCode;
+    }
+    if (data.phone) {
+      payload.phone = data.phone;
+    }
 
+    const res = await request<any>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.user || !res.tokens) {
+      throw new Error('Invalid registration response from server');
+    }
+
+    const user: User = {
+      id: res.user.id,
+      email: res.user.email,
+      fullName: res.user.fullName || res.user.full_name,
+      companyId: res.user.companyId ?? res.user.company_id,
+      role: res.user.role,
+      verified: res.user.corporateVerified ?? res.user.verified ?? false,
+    };
+
+    const tokens: AuthTokens = {
+      accessToken: res.tokens.accessToken || res.tokens.access_token,
+      refreshToken: res.tokens.refreshToken || res.tokens.refresh_token,
+    };
+
+    if (!tokens.accessToken || !tokens.refreshToken) {
+      throw new Error('Authentication tokens were not returned by the server');
+    }
+
+    setTokens(tokens, user);
+    return { user, tokens };
+  },
+  
   async getMe(): Promise<User | null> {
     const cached = getCachedUser();
     if (!getAccessToken()) return cached;

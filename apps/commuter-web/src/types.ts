@@ -5,7 +5,7 @@ export interface User {
   phone?: string;
   companyId: number;
   companyName?: string;
-  role: 'commuter' | 'driver' | 'admin';
+  role: 'employee' | 'driver' | 'admin' | 'policymaker';
   verified?: boolean;
 }
 
