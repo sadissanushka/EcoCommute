@@ -95,5 +95,57 @@ describe('Routing Engine API Endpoints', () => {
     expect(res.body.distanceM).toBe(1800);
     expect(res.body.nodeCount).toBe(2);
     expect(res.body.nodesExpanded).toBeGreaterThan(0);
+    jest.restoreAllMocks();
+  });
+
+  test('POST /route supports ordered waypoints and returns leg breakdown (Contract C1)', async () => {
+    graph.addNode({ id: '3', lat: 6.9065, lng: 79.8510 });
+    graph.addEdge({
+      id: 'e2',
+      source: '2',
+      target: '3',
+      distanceM: 1500,
+      speedKmh: 40,
+      isOneway: false,
+    });
+
+    const res = await request(app)
+      .post('/route')
+      .send({
+        origin: { lat: 6.9344, lng: 79.8428 },
+        waypoints: [{ lat: 6.9218, lng: 79.8533 }],
+        destination: { lat: 6.9065, lng: 79.8510 },
+        algorithm: 'astar',
+        mode: 'distance',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.distanceM).toBe(3300);
+    expect(res.body.legs).toHaveLength(2);
+  });
+
+  test('POST /rides, GET /matches?rideId=..., and POST /matches/confirm operate end-to-end', async () => {
+    const postOffer = await request(app)
+      .post('/rides')
+      .send({
+        type: 'offer',
+        userId: 'user-driver-10',
+        userName: 'Test Driver',
+        origin: { lat: 6.9040, lng: 79.9540 },
+        destination: { lat: 6.9344, lng: 79.8428 },
+        seats: 2,
+        womenOnly: false,
+      });
+    expect(postOffer.status).toBe(201);
+
+    const matchesRes = await request(app).get('/matches?rideId=req-1');
+    expect(matchesRes.status).toBe(200);
+    expect(matchesRes.body.matchesCount).toBeGreaterThanOrEqual(1);
+
+    const confirmRes = await request(app)
+      .post('/matches/confirm')
+      .send({ offerId: 'offer-1', requestId: 'req-1', tripId: 1 });
+    expect(confirmRes.status).toBe(200);
+    expect(confirmRes.body.match.status).toBe('confirmed');
   });
 });
