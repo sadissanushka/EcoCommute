@@ -1,0 +1,12 @@
+{
+  "options": {
+    "paths": {
+      "root": "/data"
+    }
+  },
+  "data": {
+    "sri-lanka": {
+      "mbtiles": "sri-lanka.mbtiles"
+    }
+  }
+}
