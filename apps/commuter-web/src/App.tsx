@@ -5,15 +5,17 @@ import { SeatSelection } from './pages/SeatSelection';
 import { LiveTracking } from './pages/LiveTracking';
 import { EmergencySos } from './pages/EmergencySos';
 import { Wallet } from './pages/Wallet';
+
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { User } from './types';
 import { getCachedUser, clearSession } from './api/client';
-
+import { BookRide } from './pages/BookRide';
+import { MyBookings } from './pages/MyBookings';
 export const App: React.FC = () => {
   // Navigation View State
   const [viewMode, setViewMode] = useState<
-    'map' | 'home' | 'seats' | 'tracking' | 'wallet' | 'sos' | 'login' | 'register'
+    'map' | 'home' | 'booking' | 'seats' | 'tracking' | 'wallet' | 'sos' | 'bookings' | 'login' | 'register'
   >('home');
   const [selectedTripId, setSelectedTripId] = useState<number>(1);
   const [registrationNotice, setRegistrationNotice] = useState<{ email: string; message: string } | null>(null);
@@ -146,14 +148,18 @@ export const App: React.FC = () => {
               <span>Map Studio</span>
             </button>
             <span className="font-bold text-base text-on-surface">
-              {viewMode === 'seats'
+              {viewMode === 'booking'
+                ? 'Find Your Shuttle'
+                : viewMode === 'seats'
                 ? 'Seat Selection'
                 : viewMode === 'tracking'
-                ? 'Live Telematics'
+                ? 'Live Telematics'  
                 : viewMode === 'sos'
                 ? 'Emergency SOS'
                 : viewMode === 'wallet'
                 ? 'Wallet & ESG'
+                : viewMode === 'bookings'
+                ? 'My Bookings'
                 : 'Commuter Hub'}
             </span>
           </div>
@@ -191,18 +197,28 @@ export const App: React.FC = () => {
         {viewMode === 'home' && (
           <Home
             user={currentUser}
-            onNavigateToBook={() => setViewMode('map')}
+            onNavigateToBook={() => setViewMode('booking')}
             onNavigateToTracking={() => setViewMode('tracking')}
             onNavigateToWallet={() => setViewMode('wallet')}
             onNavigateToSos={() => setViewMode('sos')}
           />
         )}
 
+        {viewMode === 'booking' && (
+          <BookRide
+            onSelectTrip={(tripId) => {
+              setSelectedTripId(tripId);
+              setViewMode('seats');
+            }}
+            onNavigateHome={() => setViewMode('home')}
+          />
+        )}
+
         {viewMode === 'seats' && (
           <SeatSelection
             tripId={selectedTripId}
-            onBookingSuccess={() => setViewMode('map')}
-            onBack={() => setViewMode('map')}
+            onBookingSuccess={() => setViewMode('home')}
+            onBack={() => setViewMode('booking')}
           />
         )}
 
@@ -217,6 +233,12 @@ export const App: React.FC = () => {
         {viewMode === 'sos' && <EmergencySos onBack={() => setViewMode('map')} />}
 
         {viewMode === 'wallet' && <Wallet />}
+
+        {viewMode === 'bookings' && (
+          <MyBookings
+            onBack={() => setViewMode('home')}
+          />
+        )}
       </div>
 
       {/* Floating Bottom Navigation */}
@@ -239,6 +261,21 @@ export const App: React.FC = () => {
             <span className="material-symbols-outlined text-[22px]">grid_view</span>
             <span className="text-[11px] mt-0.5">Hub</span>
           </button>
+
+          <button
+            onClick={() => setViewMode('bookings')}
+            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all ${
+              viewMode === 'bookings'
+                ? 'text-primary font-bold'
+                : 'text-on-surface-variant'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[22px]">
+              confirmation_number
+            </span>
+            <span className="text-[11px] mt-0.5">Bookings</span>
+          </button>
+
 
           <button
             onClick={() => setViewMode('tracking')}
