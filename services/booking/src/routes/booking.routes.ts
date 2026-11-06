@@ -741,6 +741,11 @@ bookingRouter.get('/bookings/me', requireAuth, async (req: Request, res: Respons
        LEFT JOIN booking.seat_assignments sa ON sa.booking_id = b.id AND sa.status = 'active'
        LEFT JOIN booking.seats s ON s.id = sa.seat_id
        WHERE b.user_id = $1
+         AND NOT EXISTS (
+           SELECT 1
+           FROM booking.hidden_bookings hb
+           WHERE hb.booking_id = b.id AND hb.user_id = $1
+         )
        GROUP BY b.id, st.depart_at, st.arrive_at, sr.name, sr.origin_name, sr.destination_name, v.plate_no, v.type
        ORDER BY b.created_at DESC`,
       [userId]
@@ -805,6 +810,73 @@ bookingRouter.get('/bookings/:id', requireAuth, async (req: Request, res: Respon
   }
 });
 
+// POST /bookings/:id/hide - Hide an already-cancelled booking for its owner
+bookingRouter.post('/bookings/:id/hide', requireAuth, async (req: Request, res: Response) => {
+  const bookingId = parseInt(req.params.id, 10);
+  if (isNaN(bookingId)) {
+    res.status(400).json({ error: { code: 'INVALID_ID', message: 'Booking ID must be integer', details: {} } });
+    return;
+  }
+
+  const userId = req.user!.userId;
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const bookingRes = await client.query(
+      'SELECT id, user_id, status FROM booking.bookings WHERE id = $1 FOR UPDATE',
+      [bookingId]
+    );
+
+    if (bookingRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Booking not found', details: {} } });
+      return;
+    }
+
+    const booking = bookingRes.rows[0];
+    if (Number(booking.user_id) !== Number(userId)) {
+      await client.query('ROLLBACK');
+      res.status(403).json({ error: { code: 'FORBIDDEN', message: 'You cannot remove another user booking', details: {} } });
+      return;
+    }
+
+    if (booking.status !== 'cancelled') {
+      await client.query('ROLLBACK');
+      res.status(409).json({
+        error: {
+          code: 'BOOKING_NOT_CANCELLED',
+          message: 'Only cancelled bookings can be removed from your list',
+          details: { status: booking.status },
+        },
+      });
+      return;
+    }
+
+    await client.query(
+      `INSERT INTO booking.hidden_bookings (booking_id, user_id)
+       VALUES ($1, $2)
+       ON CONFLICT (booking_id, user_id) DO NOTHING`,
+      [bookingId, userId]
+    );
+
+    await client.query('COMMIT');
+    res.status(200).json({
+      success: true,
+      message: 'Cancelled booking hidden from your booking list',
+    });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    console.error('Error hiding cancelled booking:', err);
+    res.status(500).json({
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to remove cancelled booking from your list', details: { error: err.message } },
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // DELETE /bookings/:id - Cancel booking and release seats
 bookingRouter.delete('/bookings/:id', requireAuth, async (req: Request, res: Response) => {
   const bookingId = parseInt(req.params.id, 10);
@@ -842,6 +914,18 @@ bookingRouter.delete('/bookings/:id', requireAuth, async (req: Request, res: Res
     if (booking.status === 'cancelled') {
       await client.query('ROLLBACK');
       res.status(400).json({ error: { code: 'ALREADY_CANCELLED', message: 'Booking is already cancelled', details: {} } });
+      return;
+    }
+
+    if (booking.status !== 'confirmed') {
+      await client.query('ROLLBACK');
+      res.status(400).json({
+        error: {
+          code: 'CANCELLATION_NOT_ALLOWED',
+          message: `Booking cannot be cancelled while its status is '${booking.status}'`,
+          details: { status: booking.status },
+        },
+      });
       return;
     }
 
