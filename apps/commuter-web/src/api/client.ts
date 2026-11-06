@@ -1,9 +1,15 @@
-import { User, AuthTokens, ShuttleTrip, Booking, WalletBalance, Transaction, LiveVehicleTelemetry } from '../types';
+import { User, AuthTokens, ShuttleTrip, BookingConfirmation, MyBooking, WalletBalance, Transaction, LiveVehicleTelemetry } from '../types';
 
 const API_BASE = 'http://localhost:8080';
 
 function getAccessToken(): string | null {
-  return localStorage.getItem('access_token');
+  const storedToken = localStorage.getItem('access_token')?.trim();
+  if (!storedToken) return null;
+
+  // Older sessions may have stored the complete Authorization value instead
+  // of the token alone. Strip any repeated Bearer prefix before adding it below.
+  const token = storedToken.replace(/^(?:Bearer\s+)+/i, '').trim();
+  return token || null;
 }
 
 export function setTokens(tokens: AuthTokens, user?: User) {
@@ -283,150 +289,192 @@ export const safetyApi = {
 
 // 3. Booking & Route Trips API
 export const bookingApi = {
-  async getTrips(params?: { origin?: string; destination?: string }): Promise<ShuttleTrip[]> {
-    try {
-      const query = new URLSearchParams(params as any).toString();
-      const res = await request<any>(`/trips${query ? '?' + query : ''}`);
-      if (Array.isArray(res.trips) && res.trips.length > 0) {
-        return res.trips;
-      }
-    } catch (e) {
-      console.warn('Booking API fetch failed, using active phase 1 corporate trips');
+  async getTrips(params?: {
+    origin?: string;
+    destination?: string;
+    date?: string;
+    seatsNeeded?: number;
+  }): Promise<ShuttleTrip[]> {
+    const queryParams = new URLSearchParams();
+
+    if (params?.origin?.trim()) {
+      queryParams.set('origin', params.origin.trim());
     }
 
-    // Default seeded corporate shuttle trips matching DB seed (Module 2)
-    return [
-      {
-        id: 1,
-        routeId: 1,
-        routeName: 'Line 14-B Express (Colombo CBD Shuttle)',
-        originName: 'Galle Face Center Rd, Colombo 03',
-        destinationName: 'WTC & Port City Tech Corridor, Colombo 01',
-        departAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-        arriveAt: new Date(Date.now() + 45 * 60 * 1000).toISOString(),
-        status: 'scheduled',
-        availableSeats: 14,
-        driverName: 'Kamal Perera',
-        vehicle: {
-          id: 1,
-          plateNo: 'WP-ND-8820 (EV Shuttle)',
-          type: 'Electric Minibus',
-          capacity: 14,
-        },
-      },
-      {
-        id: 2,
-        routeId: 2,
-        routeName: 'Line 08 Tech Connect (Suburban Orbit)',
-        originName: 'Barnes Place, Colombo 07',
-        destinationName: 'Innovation Hub, Orion City, Colombo 09',
-        departAt: new Date(Date.now() + 40 * 60 * 1000).toISOString(),
-        arriveAt: new Date(Date.now() + 85 * 60 * 1000).toISOString(),
-        status: 'scheduled',
-        availableSeats: 11,
-        driverName: 'Sunil Silva',
-        vehicle: {
-          id: 2,
-          plateNo: 'WP-NB-5541',
-          type: 'Hybrid Coach',
-          capacity: 14,
-        },
-      },
-    ];
-  },
-
-  async getTripDetails(tripId: number): Promise<ShuttleTrip> {
-    try {
-      const res = await request<any>(`/trips/${tripId}`);
-      if (res.trip) return res.trip;
-    } catch (e) {
-      console.warn(`Trip detail for ${tripId} offline, generating 14-seat layout`);
+    if (params?.destination?.trim()) {
+      queryParams.set('destination', params.destination.trim());
     }
 
-    // 14-seat standard layout matching seat_selection_1 design
-    const defaultSeats = [
-      { id: 1, label: '1A', row: 1, col: 1, isWindow: true, isAisle: false, isAccessible: true, isAvailable: true },
-      { id: 2, label: '1B', row: 1, col: 2, isWindow: false, isAisle: true, isAccessible: true, isAvailable: true },
-      { id: 3, label: '1C', row: 1, col: 3, isWindow: false, isAisle: true, isAccessible: false, isAvailable: false },
-      { id: 4, label: '1D', row: 1, col: 4, isWindow: true, isAisle: false, isAccessible: false, isAvailable: true },
+    if (params?.date) {
+      queryParams.set('date', params.date);
+    }
 
-      { id: 5, label: '2A', row: 2, col: 1, isWindow: true, isAisle: false, isAccessible: false, isAvailable: true },
-      { id: 6, label: '2B', row: 2, col: 2, isWindow: false, isAisle: true, isAccessible: false, isAvailable: true },
-      { id: 7, label: '2C', row: 2, col: 3, isWindow: true, isAisle: false, isAccessible: false, isAvailable: true },
+    if (params?.seatsNeeded !== undefined) {
+      queryParams.set('seatsNeeded', String(params.seatsNeeded));
+    }
 
-      { id: 8, label: '3A', row: 3, col: 1, isWindow: true, isAisle: false, isAccessible: false, isAvailable: true },
-      { id: 9, label: '3B', row: 3, col: 2, isWindow: false, isAisle: true, isAccessible: false, isAvailable: false },
-      { id: 10, label: '3C', row: 3, col: 3, isWindow: false, isAisle: true, isAccessible: false, isAvailable: true },
-      { id: 11, label: '3D', row: 3, col: 4, isWindow: true, isAisle: false, isAccessible: false, isAvailable: true },
+    const query = queryParams.toString();
+    const endpoint = `/trips${query ? `?${query}` : ''}`;
 
-      { id: 12, label: '4A', row: 4, col: 1, isWindow: true, isAisle: false, isAccessible: false, isAvailable: true },
-      { id: 13, label: '4B', row: 4, col: 2, isWindow: false, isAisle: true, isAccessible: false, isAvailable: true },
-      { id: 14, label: '4C', row: 4, col: 3, isWindow: true, isAisle: false, isAccessible: false, isAvailable: true },
-    ];
+    // Use the shared request function.
+    // It handles the API Gateway URL, JWT header and HTTP errors.
+    const res = await request<{ trips?: ShuttleTrip[] }>(endpoint);
 
-    return {
-      id: tripId,
-      routeId: 1,
-      routeName: 'Line 14-B Express',
-      originName: 'Galle Face Center Rd, Colombo 03',
-      destinationName: 'WTC Colombo 01',
-      departAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      arriveAt: new Date(Date.now() + 45 * 60 * 1000).toISOString(),
-      status: 'scheduled',
-      availableSeats: 11,
-      driverName: 'Kamal Perera',
-      vehicle: {
-        id: 1,
-        plateNo: 'WP-ND-8820',
-        type: 'Electric Shuttle #882',
-        capacity: 14,
-      },
-      seats: defaultSeats,
-    };
+    // An empty array is a valid result: it means no trips matched.
+    if (!Array.isArray(res.trips)) {
+      throw new Error('Invalid trip search response received from the server.');
+    }
+
+    return res.trips;
   },
 
-  async createBooking(tripId: number, seatId: number): Promise<Booking> {
-    const res = await request<any>(`/trips/${tripId}/bookings`, {
-      method: 'POST',
-      body: JSON.stringify({
-        partySize: 1,
-        seatIds: [seatId],
-      }),
+
+async getTripDetails(tripId: number): Promise<ShuttleTrip> {
+  const numericTripId = Number(tripId);
+
+  if (!Number.isInteger(numericTripId) || numericTripId <= 0) {
+    throw new Error('Invalid trip ID.');
+  }
+
+  const res = await request<any>(`/trips/${numericTripId}`);
+
+  if (!res.trip || !Array.isArray(res.trip.seats)) {
+    throw new Error('Invalid trip details received from the server.');
+  }
+
+  return {
+    ...res.trip,
+    id: Number(res.trip.id),
+    vehicle: {
+      ...res.trip.vehicle,
+      id: Number(res.trip.vehicle.id),
+      capacity: Number(res.trip.vehicle.capacity),
+    },
+    seats: res.trip.seats.map((seat: any) => ({
+      ...seat,
+      id: Number(seat.id),
+      row: Number(seat.row),
+      col: Number(seat.col),
+    })),
+  };
+},
+
+async createBooking(tripId: number, seatId: number): Promise<BookingConfirmation> {
+  const numericTripId = Number(tripId);
+  const numericSeatId = Number(seatId);
+
+  if (
+    !Number.isInteger(numericTripId) ||
+    numericTripId <= 0 ||
+    !Number.isInteger(numericSeatId) ||
+    numericSeatId <= 0
+  ) {
+    throw new Error('Invalid trip ID or seat ID.');
+  }
+
+  const res = await request<any>(`/trips/${numericTripId}/bookings`, {
+    method: 'POST',
+    body: JSON.stringify({
+      partySize: 1,
+      seatIds: [numericSeatId],
+    }),
+  });
+
+  if (
+    !res.booking ||
+    !Number.isInteger(Number(res.booking.id)) ||
+    !Array.isArray(res.booking.assignedSeatIds)
+  ) {
+    throw new Error('The server did not return a valid booking confirmation.');
+  }
+
+  return {
+    id: Number(res.booking.id),
+    tripId: Number(res.booking.tripId ?? res.booking.trip_id ?? numericTripId),
+    userId: Number(res.booking.userId ?? res.booking.user_id),
+    partySize: Number(res.booking.partySize ?? res.booking.party_size),
+    status: res.booking.status,
+    assignedSeatIds: res.booking.assignedSeatIds.map(Number),
+    createdAt: res.booking.createdAt ?? res.booking.created_at,
+  };
+},
+
+
+  async getMyBookings(): Promise<MyBooking[]> {
+  const res = await request<{ bookings?: any[] }>('/bookings/me');
+
+  if (!Array.isArray(res.bookings)) {
+    throw new Error('Invalid bookings response from the server.');
+  }
+
+  return res.bookings.map((booking) => ({
+    id: Number(booking.id),
+    tripId: Number(booking.trip_id),
+    partySize: Number(booking.party_size),
+    status: booking.status,
+    createdAt: booking.created_at,
+    departAt: booking.depart_at,
+    arriveAt: booking.arrive_at,
+    routeName: booking.route_name,
+    originName: booking.origin_name,
+    destinationName: booking.destination_name,
+    plateNo: booking.plate_no,
+    vehicleType: booking.vehicle_type,
+    seats: Array.isArray(booking.seats)
+      ? booking.seats.map((seat: any) => ({
+          id: Number(seat.id),
+          label: seat.label,
+        }))
+      : [],
+    }));
+  },
+
+  async cancelBooking(bookingId: number): Promise<void> {
+    if (!Number.isInteger(bookingId) || bookingId <= 0) {
+      throw new Error('Invalid booking ID.');
+    }
+
+    if (!getAccessToken()) {
+      throw new Error('Your session is missing or has expired. Please sign in again before cancelling a booking.');
+    }
+
+    const res = await request<{
+      success: boolean;
+      message: string;
+    }>(`/bookings/${bookingId}`, {
+      method: 'DELETE',
     });
 
-    return {
-      id: res.booking?.id || Math.floor(Math.random() * 9000) + 1000,
-      tripId,
-      userId: 1,
-      seatId,
-      status: 'confirmed',
-      createdAt: new Date().toISOString(),
-      departAt: res.booking?.departAt || new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      originName: 'Galle Face Center Rd',
-      destinationName: 'WTC Colombo',
-    };
-  },
-
-  async getMyBookings(): Promise<Booking[]> {
-    try {
-      const res = await request<any>('/bookings/me');
-      return res.bookings || [];
-    } catch {
-      return [
-        {
-          id: 1042,
-          tripId: 1,
-          userId: 1,
-          seatLabel: '1A',
-          status: 'confirmed',
-          createdAt: new Date().toISOString(),
-          departAt: 'Today, 5:30 PM',
-          originName: 'Corporate Park - East Wing',
-          destinationName: 'Green Valley Residence',
-        },
-      ];
+    if (!res.success) {
+      throw new Error(
+        res.message || 'The booking could not be cancelled.'
+      );
     }
   },
+
+  async hideCancelledBooking(bookingId: number): Promise<void> {
+    if (!Number.isInteger(bookingId) || bookingId <= 0) {
+      throw new Error('Invalid booking ID.');
+    }
+
+    if (!getAccessToken()) {
+      throw new Error('Your session is missing or has expired. Please sign in again before removing a booking.');
+    }
+
+    const res = await request<{
+      success: boolean;
+      message: string;
+    }>(`/bookings/${bookingId}/hide`, {
+      method: 'POST',
+    });
+
+    if (!res.success) {
+      throw new Error(
+        res.message || 'The cancelled booking could not be removed from your list.'
+      );
+    }
+  },
+
 };
 
 // 4. Wallet & Carbon Emission API
