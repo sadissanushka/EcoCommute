@@ -7,13 +7,14 @@ import { EmergencySos } from './pages/EmergencySos';
 import { Wallet } from './pages/Wallet';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
+import { RideMatching } from './pages/RideMatching';
 import { User } from './types';
 import { getCachedUser, clearSession } from './api/client';
 
 export const App: React.FC = () => {
   // Navigation View State
   const [viewMode, setViewMode] = useState<
-    'map' | 'home' | 'seats' | 'tracking' | 'wallet' | 'sos' | 'login' | 'register'
+    'map' | 'home' | 'rides' | 'seats' | 'tracking' | 'wallet' | 'sos' | 'login' | 'register'
   >('home');
   const [selectedTripId, setSelectedTripId] = useState<number>(1);
   const [registrationNotice, setRegistrationNotice] = useState<{ email: string; message: string } | null>(null);
@@ -148,6 +149,8 @@ export const App: React.FC = () => {
             <span className="font-bold text-base text-on-surface">
               {viewMode === 'seats'
                 ? 'Seat Selection'
+                : viewMode === 'rides'
+                ? 'Ride Matching'
                 : viewMode === 'tracking'
                 ? 'Live Telematics'
                 : viewMode === 'sos'
@@ -216,6 +219,8 @@ export const App: React.FC = () => {
 
         {viewMode === 'sos' && <EmergencySos onBack={() => setViewMode('map')} />}
 
+        {viewMode === 'rides' && <RideMatching user={currentUser} />}
+
         {viewMode === 'wallet' && <Wallet />}
       </div>
 
@@ -228,6 +233,16 @@ export const App: React.FC = () => {
           >
             <span className="material-symbols-outlined text-[22px]">explore</span>
             <span className="text-[11px] mt-0.5">Map</span>
+          </button>
+
+          <button
+            onClick={() => setViewMode('rides')}
+            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all ${
+              viewMode === 'rides' ? 'text-primary font-bold' : 'text-on-surface-variant'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[22px]">commute</span>
+            <span className="text-[11px] mt-0.5">Matches</span>
           </button>
 
           <button
