@@ -361,7 +361,7 @@ async getTripDetails(tripId: number): Promise<ShuttleTrip> {
 
   async createBooking(
     tripId: number,
-    partySizeOrSeatId: number,
+    partySize: number = 1,
     seatIds?: number[],
     requireAccessible?: boolean
   ): Promise<BookingConfirmation> {
@@ -370,20 +370,9 @@ async getTripDetails(tripId: number): Promise<ShuttleTrip> {
       throw new Error('Invalid trip ID.');
     }
 
-    let partySize = 1;
-    let seats: number[] | undefined = undefined;
-
-    if (seatIds !== undefined) {
-      partySize = Number(partySizeOrSeatId);
-      seats = seatIds;
-    } else {
-      partySize = 1;
-      seats = [Number(partySizeOrSeatId)];
-    }
-
-    const payload: any = { partySize };
-    if (seats && seats.length > 0) {
-      payload.seatIds = seats;
+    const payload: any = { partySize: Number(partySize) };
+    if (seatIds && seatIds.length > 0) {
+      payload.seatIds = seatIds.map(Number);
     }
     if (requireAccessible !== undefined) {
       payload.requireAccessible = requireAccessible;
