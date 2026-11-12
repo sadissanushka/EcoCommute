@@ -1,44 +1,48 @@
-
 import React, { useEffect, useState } from 'react';
 import { bookingApi } from '../api/client';
-import { MyBooking } from '../types';
+import { MyBooking, WaitlistEntry } from '../types';
 
 interface MyBookingsProps {
   onBack: () => void;
+  onNavigateToFindShuttle?: () => void;
 }
 
-export const MyBookings: React.FC<MyBookingsProps> = ({ onBack }) => {
+export const MyBookings: React.FC<MyBookingsProps> = ({ onBack, onNavigateToFindShuttle }) => {
   const [bookings, setBookings] = useState<MyBooking[]>([]);
+  const [waitlists, setWaitlists] = useState<WaitlistEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [cancellingWaitlistTripId, setCancellingWaitlistTripId] = useState<number | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [removeTargetId, setRemoveTargetId] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const loadBookings = async () => {
+  const loadData = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const result = await bookingApi.getMyBookings();
-      setBookings(result);
+      const [bookingsRes, waitlistRes] = await Promise.all([
+        bookingApi.getMyBookings(),
+        bookingApi.getMyWaitlist(),
+      ]);
+      setBookings(bookingsRes);
+      setWaitlists(waitlistRes);
     } catch (err: any) {
-      setError(
-        err.message || 'Unable to load your bookings.'
-      );
+      setError(err.message || 'Unable to load your bookings and waitlist entries.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadBookings();
+    loadData();
   }, []);
 
-  const handleCancel = async (booking: MyBooking) => {
+  const handleCancelBooking = async (booking: MyBooking) => {
     const confirmed = window.confirm(
-      `Are you sure you want to cancel booking #${booking.id}?`
+      `Are you sure you want to cancel booking #${booking.id}? If waitlisted riders are waiting, they will be automatically promoted.`
     );
 
     if (!confirmed) return;
@@ -49,23 +53,37 @@ export const MyBookings: React.FC<MyBookingsProps> = ({ onBack }) => {
 
     try {
       await bookingApi.cancelBooking(booking.id);
-
       setNotice(
-        `Booking #${booking.id} was successfully cancelled. Its assigned seat has been released.`
+        `Booking #${booking.id} was successfully cancelled. Seats have been released and any eligible waitlisted riders have been promoted.`
       );
-
-      // Fetch the latest booking records from the backend.
-      await loadBookings();
+      await loadData();
     } catch (err: any) {
-      setError(
-        err.message || 'Unable to cancel this booking.'
-      );
+      setError(err.message || 'Unable to cancel this booking.');
     } finally {
       setCancellingId(null);
     }
   };
 
-  const handleRemove = async () => {
+  const handleLeaveWaitlist = async (tripId: number) => {
+    const confirmed = window.confirm('Are you sure you want to withdraw from this waitlist?');
+    if (!confirmed) return;
+
+    setCancellingWaitlistTripId(tripId);
+    setError(null);
+    setNotice(null);
+
+    try {
+      await bookingApi.leaveWaitlist(tripId);
+      setNotice('You have successfully left the waitlist.');
+      await loadData();
+    } catch (err: any) {
+      setError(err.message || 'Unable to withdraw from waitlist.');
+    } finally {
+      setCancellingWaitlistTripId(null);
+    }
+  };
+
+  const handleHideCancelledBooking = async () => {
     const bookingId = removeTargetId;
     if (bookingId === null || removingId !== null) return;
 
@@ -75,17 +93,11 @@ export const MyBookings: React.FC<MyBookingsProps> = ({ onBack }) => {
 
     try {
       await bookingApi.hideCancelledBooking(bookingId);
-      setBookings((current) =>
-        current.filter((booking) => booking.id !== bookingId)
-      );
-      setNotice(
-        `Cancelled booking #${bookingId} was removed from your booking list.`
-      );
+      setBookings((current) => current.filter((b) => b.id !== bookingId));
+      setNotice(`Cancelled booking #${bookingId} was removed from your visible list.`);
       setRemoveTargetId(null);
     } catch (err: any) {
-      setError(
-        err.message || 'Unable to remove this cancelled booking from your list.'
-      );
+      setError(err.message || 'Unable to remove this cancelled booking from your list.');
       setRemoveTargetId(null);
     } finally {
       setRemovingId(null);
@@ -94,312 +106,276 @@ export const MyBookings: React.FC<MyBookingsProps> = ({ onBack }) => {
 
   const formatDate = (value: string) => {
     if (!value) return 'Not available';
-
     const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return value;
-    }
-
-    return date.toLocaleString([], {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
   };
 
-  const getStatusStyle = (status: string) => {
+  const getStatusBadge = (status: string) => {
     switch (status.toLowerCase()) {
       case 'confirmed':
-        return 'bg-green-100 text-green-800';
-
+        return 'bg-emerald-100 text-emerald-800 border-emerald-300';
       case 'cancelled':
-        return 'bg-red-100 text-red-800';
-
-      case 'waitlisted':
-        return 'bg-amber-100 text-amber-800';
-
+        return 'bg-red-100 text-red-800 border-red-300';
+      case 'waiting':
+        return 'bg-amber-100 text-amber-800 border-amber-300';
+      case 'promoted':
+        return 'bg-purple-100 text-purple-800 border-purple-300';
       case 'boarded':
-        return 'bg-blue-100 text-blue-800';
-
+        return 'bg-blue-100 text-blue-800 border-blue-300';
       default:
-        return 'bg-gray-100 text-gray-700';
+        return 'bg-gray-100 text-gray-700 border-gray-300';
     }
   };
 
-  return (
-    <main className="min-h-screen bg-surface px-4 pt-5 pb-28 max-w-lg mx-auto">
+  const hasItems = bookings.length > 0 || waitlists.length > 0;
 
-      {/* Page heading */}
+  return (
+    <main className="min-h-screen bg-surface px-4 pt-5 pb-28 max-w-lg mx-auto font-sans">
+      {/* Page Header */}
       <div className="flex items-center gap-3 mb-5">
         <button
           type="button"
           onClick={onBack}
-          className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center"
+          className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center cursor-pointer hover:bg-surface-container-highest transition-all"
           aria-label="Back to Hub"
         >
-          <span className="material-symbols-outlined">
-            arrow_back
-          </span>
+          <span className="material-symbols-outlined">arrow_back</span>
         </button>
 
         <div>
-          <h1 className="text-xl font-bold text-on-surface">
-            My Bookings
-          </h1>
-
-          <p className="text-xs text-outline">
-            View and manage your shuttle reservations
-          </p>
+          <h1 className="text-xl font-bold text-on-surface">My Bookings & Waitlists</h1>
+          <p className="text-xs text-outline">Manage your shuttle reservations and queue positions</p>
         </div>
       </div>
 
-      {/* Success notice */}
+      {/* Success Notice */}
       {notice && (
-        <div className="mb-4 p-3 rounded-xl bg-green-100 text-green-800 text-sm">
-          {notice}
+        <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs flex items-center gap-2">
+          <span className="material-symbols-outlined text-[18px]">check_circle</span>
+          <span>{notice}</span>
         </div>
       )}
 
-      {/* Error message */}
+      {/* Error Message */}
       {error && (
-        <div className="mb-4 p-3 rounded-xl bg-error-container text-on-error-container text-sm">
-          {error}
-
+        <div className="mb-4 p-3 rounded-xl bg-error-container text-on-error-container text-xs flex items-center justify-between">
+          <span>{error}</span>
           <button
             type="button"
-            onClick={loadBookings}
-            className="block mt-2 font-bold underline"
+            onClick={loadData}
+            className="font-bold underline cursor-pointer ml-2"
           >
-            Try again
+            Retry
           </button>
         </div>
       )}
 
-      {/* Loading */}
+      {/* Loading Spinner */}
       {loading && (
         <div className="py-12 text-center">
           <span className="material-symbols-outlined text-3xl text-primary animate-spin">
             progress_activity
           </span>
-
-          <p className="mt-2 text-sm text-outline">
-            Loading your bookings...
-          </p>
+          <p className="mt-2 text-sm text-outline">Loading your bookings...</p>
         </div>
       )}
 
-      {/* Empty state */}
-      {!loading && !error && bookings.length === 0 && (
+      {/* Empty State */}
+      {!loading && !error && !hasItems && (
         <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-outline-variant/30">
-          <span className="material-symbols-outlined text-5xl text-outline">
-            event_seat
-          </span>
-
-          <h2 className="mt-3 font-bold text-on-surface">
-            No bookings to display
-          </h2>
-
+          <span className="material-symbols-outlined text-5xl text-outline">event_seat</span>
+          <h2 className="mt-3 font-bold text-on-surface">No active bookings or waitlists</h2>
           <p className="mt-1 text-sm text-outline">
-            Your visible shuttle reservations will appear here after you book a trip.
+            Your shuttle reservations and waitlist status will appear here after booking a ride.
           </p>
-
           <button
             type="button"
-            onClick={onBack}
-            className="mt-5 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-bold"
+            onClick={onNavigateToFindShuttle || onBack}
+            className="mt-5 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-bold shadow-md hover:brightness-110 cursor-pointer"
           >
             Find a Shuttle
           </button>
         </div>
       )}
 
-      {/* Booking cards */}
-      {!loading && bookings.length > 0 && (
-        <div className="space-y-4">
-          {bookings.map((booking) => {
-            const canCancel =
-              booking.status.toLowerCase() === 'confirmed';
-            const canRemove =
-              booking.status.toLowerCase() === 'cancelled';
+      {!loading && hasItems && (
+        <div className="space-y-6">
+          {/* Active Waitlist Section (M2-05) */}
+          {waitlists.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-amber-600 text-[20px]">hourglass_top</span>
+                <h2 className="text-sm font-bold text-on-surface uppercase tracking-wider">
+                  Active Waitlist ({waitlists.length})
+                </h2>
+              </div>
 
-            return (
-              <article
-                key={booking.id}
-                className="bg-white rounded-2xl p-4 shadow-sm border border-outline-variant/30"
-              >
-                {/* Booking reference and status */}
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider font-semibold text-outline">
-                      Booking reference
-                    </p>
+              {waitlists.map((w) => (
+                <div
+                  key={w.id}
+                  className="bg-white rounded-2xl p-4 shadow-sm border border-amber-200 flex flex-col gap-3 relative overflow-hidden"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="text-[10px] font-mono text-outline">WAITLIST #{w.id}</span>
+                      <h3 className="font-bold text-sm text-on-surface mt-0.5">
+                        {w.routeName || `Trip #${w.tripId}`}
+                      </h3>
+                      <p className="text-xs text-on-surface-variant mt-0.5">
+                        {w.originName} → {w.destinationName}
+                      </p>
+                    </div>
 
-                    <p className="font-mono font-bold text-on-surface">
-                      #EC-{booking.id}
-                    </p>
+                    <div className="text-right">
+                      <span className="px-2.5 py-1 rounded-full text-xs font-extrabold bg-amber-100 text-amber-800 border border-amber-300 inline-block">
+                        Queue #{w.position}
+                      </span>
+                    </div>
                   </div>
 
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-bold capitalize ${getStatusStyle(
-                      booking.status
-                    )}`}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-outline bg-surface-container-lowest p-2.5 rounded-xl">
+                    <span>👥 Party Size: <strong>{w.partySize} rider(s)</strong></span>
+                    <span>🕒 Departure: <strong>{formatDate(w.departAt || '')}</strong></span>
+                    <span>🚐 Vehicle: <strong>{w.vehicleType || 'Shuttle'}</strong></span>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <p className="text-[11px] text-amber-700 italic">
+                      Automatic promotion will claim seats when cancellations occur.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => handleLeaveWaitlist(w.tripId)}
+                      disabled={cancellingWaitlistTripId === w.tripId}
+                      className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-bold hover:bg-red-50 cursor-pointer transition-all disabled:opacity-50"
+                    >
+                      {cancellingWaitlistTripId === w.tripId ? 'Leaving...' : 'Leave Waitlist'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Bookings Section */}
+          {bookings.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-[20px]">confirmation_number</span>
+                <h2 className="text-sm font-bold text-on-surface uppercase tracking-wider">
+                  Shuttle Bookings ({bookings.length})
+                </h2>
+              </div>
+
+              {bookings.map((booking) => {
+                const isConfirmed = booking.status.toLowerCase() === 'confirmed';
+                const isCancelled = booking.status.toLowerCase() === 'cancelled';
+
+                return (
+                  <div
+                    key={booking.id}
+                    className="bg-white rounded-2xl p-4 shadow-sm border border-outline-variant/30 flex flex-col gap-3 relative"
                   >
-                    {booking.status}
-                  </span>
-                </div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="text-[10px] font-mono font-bold text-primary">
+                          #EC-{booking.id}
+                        </span>
+                        <h3 className="font-bold text-sm text-on-surface mt-0.5">
+                          {booking.routeName || `Trip #${booking.tripId}`}
+                        </h3>
+                        <p className="text-xs text-on-surface-variant mt-0.5">
+                          {booking.originName} → {booking.destinationName}
+                        </p>
+                      </div>
 
-                {/* Route */}
-                <div className="py-3 border-y border-outline-variant/30">
-                  <p className="text-sm font-bold text-on-surface">
-                    {booking.originName}
-                  </p>
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${getStatusBadge(
+                          booking.status
+                        )}`}
+                      >
+                        {booking.status}
+                      </span>
+                    </div>
 
-                  <div className="flex items-center gap-2 py-1 text-outline">
-                    <span className="material-symbols-outlined text-base">
-                      south
-                    </span>
+                    {/* Booking Details */}
+                    <div className="grid grid-cols-2 gap-2 text-xs text-outline bg-surface-container-lowest p-2.5 rounded-xl">
+                      <div>
+                        <span className="block text-[10px] uppercase font-semibold text-outline">Seats Assigned</span>
+                        <span className="font-bold text-on-surface text-sm">
+                          {booking.seats && booking.seats.length > 0
+                            ? booking.seats.map((s) => s.label).join(', ')
+                            : 'First Available'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] uppercase font-semibold text-outline">Party Size</span>
+                        <span className="font-bold text-on-surface text-sm">{booking.partySize} person(s)</span>
+                      </div>
+                      <div className="col-span-2 pt-1 border-t border-outline-variant/20">
+                        <span className="text-[11px]">Departure: {formatDate(booking.departAt)}</span>
+                      </div>
+                    </div>
 
-                    <span className="text-xs">
-                      {booking.routeName}
-                    </span>
+                    {/* Actions */}
+                    <div className="flex justify-end gap-2 pt-1">
+                      {isConfirmed && (
+                        <button
+                          type="button"
+                          onClick={() => handleCancelBooking(booking)}
+                          disabled={cancellingId === booking.id}
+                          className="px-3 py-1.5 rounded-xl border border-red-300 text-red-600 text-xs font-bold hover:bg-red-50 cursor-pointer transition-all disabled:opacity-50"
+                        >
+                          {cancellingId === booking.id ? 'Cancelling...' : 'Cancel Reservation'}
+                        </button>
+                      )}
+
+                      {isCancelled && (
+                        <button
+                          type="button"
+                          onClick={() => setRemoveTargetId(booking.id)}
+                          disabled={removingId === booking.id}
+                          className="px-3 py-1.5 rounded-xl bg-surface-container-high text-on-surface text-xs font-bold hover:bg-surface-container-highest cursor-pointer transition-all disabled:opacity-50"
+                        >
+                          Hide from List
+                        </button>
+                      )}
+                    </div>
                   </div>
-
-                  <p className="text-sm font-bold text-on-surface">
-                    {booking.destinationName}
-                  </p>
-                </div>
-
-                {/* Trip information */}
-                <div className="grid grid-cols-2 gap-3 py-3">
-                  <div>
-                    <p className="text-[10px] text-outline uppercase font-semibold">
-                      Departure
-                    </p>
-
-                    <p className="text-xs font-semibold text-on-surface mt-1">
-                      {formatDate(booking.departAt)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-[10px] text-outline uppercase font-semibold">
-                      Arrival
-                    </p>
-
-                    <p className="text-xs font-semibold text-on-surface mt-1">
-                      {formatDate(booking.arriveAt)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-[10px] text-outline uppercase font-semibold">
-                      Vehicle
-                    </p>
-
-                    <p className="text-xs font-semibold text-on-surface mt-1">
-                      {booking.vehicleType}
-                    </p>
-
-                    <p className="text-[10px] text-outline">
-                      {booking.plateNo}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-[10px] text-outline uppercase font-semibold">
-                      Seats
-                    </p>
-
-                    <p className="text-xs font-semibold text-on-surface mt-1">
-                      {booking.seats.length > 0
-                        ? booking.seats.map((seat) => seat.label).join(', ')
-                        : 'No active seat assignment'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-[10px] text-outline mb-3">
-                  Booked on: {formatDate(booking.createdAt)}
-                </div>
-
-                {/* Cancellation */}
-                {canCancel && (
-                  <button
-                    type="button"
-                    onClick={() => handleCancel(booking)}
-                    disabled={cancellingId === booking.id}
-                    className="w-full py-2.5 rounded-xl border border-error/30 text-error text-sm font-bold hover:bg-error/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {cancellingId === booking.id
-                      ? 'Cancelling...'
-                      : 'Cancel Booking'}
-                  </button>
-                )}
-                {canRemove && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setError(null);
-                      setRemoveTargetId(booking.id);
-                    }}
-                    className="w-full mt-2 py-2.5 rounded-xl border border-outline-variant text-on-surface-variant text-sm font-bold hover:bg-surface-container-low flex items-center justify-center gap-2"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">
-                      delete
-                    </span>
-                    Remove
-                  </button>
-                )}
-              </article>
-            );
-          })}
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
+      {/* Confirmation Dialog for Hiding Cancelled Booking */}
       {removeTargetId !== null && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          onClick={() => {
-            if (removingId === null) setRemoveTargetId(null);
-          }}
-        >
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="remove-booking-title"
-            className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h2
-              id="remove-booking-title"
-              className="text-base font-bold text-on-surface"
-            >
-              Remove cancelled booking?
-            </h2>
-            <p className="mt-2 text-sm text-on-surface-variant">
-              Remove this cancelled booking from your booking history? This
-              will only hide it from your My Bookings list. It will not change
-              the cancellation or affect seat availability.
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl flex flex-col gap-3">
+            <h3 className="text-base font-bold text-on-surface">Hide Cancelled Booking</h3>
+            <p className="text-xs text-on-surface-variant">
+              This will remove booking #{removeTargetId} from your visible list. Its historical audit record remains securely stored in the system.
             </p>
-            <div className="mt-5 flex justify-end gap-3">
+            <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setRemoveTargetId(null)}
-                disabled={removingId !== null}
-                className="px-4 py-2 rounded-xl border border-outline-variant text-sm font-bold text-on-surface disabled:opacity-50"
+                className="px-3 py-1.5 rounded-xl bg-surface-container-high text-xs font-bold text-on-surface hover:bg-surface-container-highest cursor-pointer"
               >
-                Keep Booking
+                Cancel
               </button>
               <button
                 type="button"
-                onClick={handleRemove}
+                onClick={handleHideCancelledBooking}
                 disabled={removingId !== null}
-                className="px-4 py-2 rounded-xl bg-error text-on-error text-sm font-bold disabled:opacity-50"
+                className="px-3 py-1.5 rounded-xl bg-red-600 text-white text-xs font-bold hover:bg-red-700 cursor-pointer disabled:opacity-50"
               >
-                {removingId === removeTargetId ? 'Removing...' : 'Remove'}
+                {removingId !== null ? 'Hiding...' : 'Confirm Hide'}
               </button>
             </div>
-          </section>
+          </div>
         </div>
       )}
     </main>

@@ -95,7 +95,44 @@ export interface BookingConfirmation {
   partySize: number;
   status: 'confirmed' | 'cancelled' | 'boarded';
   assignedSeatIds: number[];
+  allocationType?: 'adjacent' | 'fallback' | 'explicit';
   createdAt: string;
+}
+
+export interface WaitlistEntry {
+  id: number;
+  tripId: number;
+  userId?: number;
+  partySize: number;
+  status: 'waiting' | 'promoted' | 'cancelled';
+  position: number;
+  createdAt: string;
+  bookingId?: number | null;
+  departAt?: string;
+  arriveAt?: string;
+  routeName?: string;
+  originName?: string;
+  destinationName?: string;
+  plateNo?: string;
+  vehicleType?: string;
+}
+
+export interface SeatHold {
+  id: number;
+  tripId: number;
+  userId: number;
+  partySize: number;
+  status: 'held' | 'confirmed' | 'expired' | 'released';
+  expiresAt: string;
+  expiresInSeconds: number;
+  seatIds: number[];
+  seats?: {
+    id: number;
+    label: string;
+    row?: number;
+    col?: number;
+  }[];
+  allocationType?: 'adjacent' | 'fallback' | 'explicit';
 }
 
 export interface WalletBalance {

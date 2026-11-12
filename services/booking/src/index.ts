@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { bookingRouter } from './routes/booking.routes';
 import { pool } from './db/pool';
+import { expireStaleHolds } from './services/seatAllocation';
 
 dotenv.config();
 
@@ -62,6 +63,15 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 if (process.env.NODE_ENV !== 'test') {
+  // Safe periodic cleanup of stale holds (cleanup layer)
+  setInterval(async () => {
+    try {
+      await expireStaleHolds(pool as any);
+    } catch {
+      // quiet error suppression for background sweep
+    }
+  }, 60000);
+
   app.listen(PORT, () => {
     console.log(`🚌 Booking Service listening on port ${PORT}`);
   });

@@ -18,6 +18,7 @@ export const App: React.FC = () => {
     'map' | 'home' | 'booking' | 'seats' | 'tracking' | 'wallet' | 'sos' | 'bookings' | 'login' | 'register'
   >('home');
   const [selectedTripId, setSelectedTripId] = useState<number>(1);
+  const [selectedPartySize, setSelectedPartySize] = useState<number>(1);
   const [registrationNotice, setRegistrationNotice] = useState<{ email: string; message: string } | null>(null);
 
   // Authenticated User State
@@ -206,19 +207,23 @@ export const App: React.FC = () => {
 
         {viewMode === 'booking' && (
           <BookRide
-            onSelectTrip={(tripId) => {
+            onSelectTrip={(tripId, partySize) => {
               setSelectedTripId(tripId);
+              setSelectedPartySize(partySize || 1);
               setViewMode('seats');
             }}
             onNavigateHome={() => setViewMode('home')}
+            onNavigateToBookings={() => setViewMode('bookings')}
           />
         )}
 
         {viewMode === 'seats' && (
           <SeatSelection
             tripId={selectedTripId}
-            onBookingSuccess={() => setViewMode('home')}
+            partySize={selectedPartySize}
+            onBookingSuccess={() => setViewMode('bookings')}
             onBack={() => setViewMode('booking')}
+            onNavigateToBookings={() => setViewMode('bookings')}
           />
         )}
 
@@ -237,6 +242,7 @@ export const App: React.FC = () => {
         {viewMode === 'bookings' && (
           <MyBookings
             onBack={() => setViewMode('home')}
+            onNavigateToFindShuttle={() => setViewMode('booking')}
           />
         )}
       </div>
