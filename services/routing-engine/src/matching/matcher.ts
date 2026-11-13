@@ -189,6 +189,74 @@ export class RouteOverlapMatcher {
   }
 
   /**
+   * Privacy Masking (Section 7 Security Checklist):
+   * Snaps/rounds coordinates to the nearest road node (or ~150m grid) so a commuter's
+   * exact home GPS coordinate is never exposed to other users in /rides or /matches.
+   */
+  public maskHomeCoordinate(point: LatLng): LatLng {
+    const activeGraph = this.graph ?? RoadGraph.activeInstance;
+    if (activeGraph && activeGraph.nodeCount > 0) {
+      let closest: LatLng | null = null;
+      let minDist = Infinity;
+      for (const loc of activeGraph.nodes.values()) {
+        const d = haversineDistanceMeters(point, loc);
+        if (d < minDist) {
+          minDist = d;
+          closest = loc;
+        }
+      }
+      if (closest && minDist <= 2500) {
+        return { lat: closest.lat, lng: closest.lng };
+      }
+    }
+    // ~150m grid rounding fallback (3 decimal places ~ 111m)
+    return {
+      lat: Number(point.lat.toFixed(3)),
+      lng: Number(point.lng.toFixed(3)),
+    };
+  }
+
+  public getPublicOffers(): RideOffer[] {
+    return this.getOffers().map((o) => ({
+      ...o,
+      origin: this.maskHomeCoordinate(o.origin),
+      destination: this.maskHomeCoordinate(o.destination),
+    }));
+  }
+
+  public getPublicRequests(): RideRequest[] {
+    return this.getRequests().map((r) => ({
+      ...r,
+      origin: this.maskHomeCoordinate(r.origin),
+      destination: this.maskHomeCoordinate(r.destination),
+    }));
+  }
+
+  /**
+   * Cross-Module Contract C3: Reads `safety.safety_preferences.women_only`
+   * from PostgreSQL when available, falling back to the request flag offline.
+   */
+  public async resolveWomenOnlyPreference(userId: string, fallbackFlag: boolean): Promise<boolean> {
+    const numericId = parseInt(String(userId).replace(/\D/g, ''), 10);
+    if (!numericId || Number.isNaN(numericId)) return fallbackFlag;
+    try {
+      const res = await pool.query(
+        `SELECT sp.women_only, u.gender
+         FROM core.users u
+         LEFT JOIN safety.safety_preferences sp ON sp.user_id = u.id
+         WHERE u.id = $1`,
+        [numericId]
+      );
+      if (res.rows.length > 0) {
+        return Boolean(res.rows[0].women_only) || fallbackFlag;
+      }
+    } catch {
+      // Standalone mode fallback
+    }
+    return fallbackFlag;
+  }
+
+  /**
    * Computes road-network distance and polyline between two coordinates using A*,
    * falling back to Haversine straight-line distance when nodes are not snapped.
    */

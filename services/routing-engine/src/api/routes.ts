@@ -7,10 +7,16 @@ import { pool } from '../graph/db.js';
 import { RouteOverlapMatcher } from '../matching/matcher.js';
 import { MultiStopOptimizer } from '../matching/multiStop.js';
 import { LatLng, RouteLegSummary } from '../types/index.js';
+import { createRateLimiter } from './rateLimit.js';
 
 export function createRouter(graph: RoadGraph): Router {
   const router = Router();
   const matcher = new RouteOverlapMatcher(2500, graph); // 2.5 km detour threshold limit
+  const computeRateLimiter = createRateLimiter({
+    windowMs: 60_000,
+    maxRequests: Number(process.env.ROUTING_RATE_LIMIT_PER_MIN || 120),
+    keyPrefix: 'routing-compute',
+  });
 
   const LatLngPointSchema = z.object({
     lat: z.number().min(-90).max(90),
@@ -79,7 +85,7 @@ export function createRouter(graph: RoadGraph): Router {
   });
 
   // 2. /route endpoint (Cost Oracle — Step 1.4 & Contract C1 Multi-Waypoint Support)
-  router.post('/route', async (req: Request, res: Response) => {
+  router.post('/route', computeRateLimiter, async (req: Request, res: Response) => {
     const parseResult = RouteSchema.safeParse(req.body);
     if (!parseResult.success) {
       res.status(400).json({
@@ -180,6 +186,7 @@ export function createRouter(graph: RoadGraph): Router {
     const id = `${data.type}-${Date.now()}`;
 
     if (data.type === 'offer') {
+      const womenOnlyResolved = await matcher.resolveWomenOnlyPreference(data.userId, data.womenOnly);
       const offer = {
         id,
         userId: data.userId,
@@ -187,13 +194,14 @@ export function createRouter(graph: RoadGraph): Router {
         origin: data.origin,
         destination: data.destination,
         timeWindowStart: data.timeWindowStart || '08:00 AM',
-        womenOnly: data.womenOnly,
+        womenOnly: womenOnlyResolved,
         seatsAvailable: data.seats,
         vehicle: data.vehicle || 'Standard Vehicle',
       };
       await matcher.persistOfferToDb(offer);
       res.status(201).json({ message: 'Ride offer published successfully', data: offer });
     } else {
+      const womenOnlyResolved = await matcher.resolveWomenOnlyPreference(data.userId, data.womenOnly);
       const request = {
         id,
         userId: data.userId,
@@ -201,7 +209,7 @@ export function createRouter(graph: RoadGraph): Router {
         origin: data.origin,
         destination: data.destination,
         timeWindowStart: data.timeWindowStart || '08:00 AM',
-        womenOnly: data.womenOnly,
+        womenOnly: womenOnlyResolved,
         seatsNeeded: data.seats,
       };
       await matcher.persistRequestToDb(request);
@@ -211,13 +219,13 @@ export function createRouter(graph: RoadGraph): Router {
 
   router.get('/rides', (_req: Request, res: Response) => {
     res.json({
-      offers: matcher.getOffers(),
-      requests: matcher.getRequests(),
+      offers: matcher.getPublicOffers(),
+      requests: matcher.getPublicRequests(),
     });
   });
 
   // 4. /matches endpoint — Ranked Candidate Matches with Detour Limit (Step 3.3 & 3.4)
-  router.get('/matches', (req: Request, res: Response) => {
+  router.get('/matches', computeRateLimiter, (req: Request, res: Response) => {
     const { requestId, offerId, rideId, greedy } = req.query;
     const targetRideId = (rideId || requestId) as string | undefined;
 
