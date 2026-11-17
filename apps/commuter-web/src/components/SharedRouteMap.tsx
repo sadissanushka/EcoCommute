@@ -58,7 +58,7 @@ export const SharedRouteMap: React.FC<SharedRouteMapProps> = ({
 
     const resolvedTileUrl =
       style ||
-      import.meta.env.VITE_SELF_HOSTED_TILES_URL ||
+      (import.meta as any).env?.VITE_SELF_HOSTED_TILES_URL ||
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
 
     L.tileLayer(resolvedTileUrl, {
@@ -152,3 +152,4 @@ export const SharedRouteMap: React.FC<SharedRouteMapProps> = ({
     />
   );
 };
+
