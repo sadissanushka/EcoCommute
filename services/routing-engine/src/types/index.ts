@@ -24,7 +24,7 @@ export interface RouteRequest {
   destination: LatLng;
   waypoints?: LatLng[];
   mode?: 'distance' | 'time';
-  algorithm?: 'dijkstra' | 'astar';
+  algorithm?: 'dijkstra' | 'astar' | 'bidirectional';
 }
 
 export interface RouteLegSummary {

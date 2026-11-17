@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { RoadGraph } from '../graph/graph.js';
 import { findShortestPathDijkstra } from '../routing/dijkstra.js';
 import { findShortestPathAStar } from '../routing/astar.js';
+import { findShortestPathBidirectional } from '../routing/bidirectional.js';
 import { pool } from '../graph/db.js';
 import { RouteOverlapMatcher } from '../matching/matcher.js';
 import { MultiStopOptimizer } from '../matching/multiStop.js';
@@ -28,7 +29,7 @@ export function createRouter(graph: RoadGraph): Router {
     destination: LatLngPointSchema,
     waypoints: z.array(LatLngPointSchema).optional(),
     mode: z.enum(['distance', 'time']).optional().default('distance'),
-    algorithm: z.enum(['dijkstra', 'astar']).optional().default('dijkstra'),
+    algorithm: z.enum(['dijkstra', 'astar', 'bidirectional']).optional().default('dijkstra'),
   });
 
   const RideOfferSchema = z.object({
@@ -79,7 +80,7 @@ export function createRouter(graph: RoadGraph): Router {
         edgeCount: graph.edgeCount,
         spatialIndex: 'GiST (PostGIS) / R-Tree In-Memory',
       },
-      capabilities: ['dijkstra', 'astar', 'route-overlap-matcher', 'nearest-neighbour', '2-opt-optimizer'],
+      capabilities: ['dijkstra', 'astar', 'bidirectional-astar', 'route-overlap-matcher', 'nearest-neighbour', '2-opt-optimizer'],
       timestamp: new Date().toISOString(),
     });
   });
@@ -123,7 +124,9 @@ export function createRouter(graph: RoadGraph): Router {
         const toSnap = validSnapped[i + 1];
 
         const legResult =
-          algorithm === 'astar'
+          algorithm === 'bidirectional'
+            ? findShortestPathBidirectional(graph, fromSnap.nodeId, toSnap.nodeId, { mode })
+            : algorithm === 'astar'
             ? findShortestPathAStar(graph, fromSnap.nodeId, toSnap.nodeId, { mode })
             : findShortestPathDijkstra(graph, fromSnap.nodeId, toSnap.nodeId, { mode });
 
@@ -448,7 +451,7 @@ export function createRouter(graph: RoadGraph): Router {
                         },
                       },
                       mode: { type: 'string', enum: ['distance', 'time'], default: 'distance' },
-                      algorithm: { type: 'string', enum: ['dijkstra', 'astar'], default: 'astar' },
+                      algorithm: { type: 'string', enum: ['dijkstra', 'astar', 'bidirectional'], default: 'astar' },
                     },
                   },
                 },
