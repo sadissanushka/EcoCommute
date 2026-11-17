@@ -16,8 +16,7 @@ import { MyBookings } from './pages/MyBookings';
 export const App: React.FC = () => {
   // Navigation View State
   const [viewMode, setViewMode] = useState<
-    'map' | 'home' | 'booking' | 'seats' | 'tracking' | 'wallet' | 'sos' | 'bookings' | 'login' | 'register'
-    'map' | 'home' | 'rides' | 'seats' | 'tracking' | 'wallet' | 'sos' | 'login' | 'register'
+    'map' | 'home' | 'rides' | 'booking' | 'seats' | 'tracking' | 'wallet' | 'sos' | 'bookings' | 'login' | 'register'
   >('home');
   const [selectedTripId, setSelectedTripId] = useState<number>(1);
   const [registrationNotice, setRegistrationNotice] = useState<{ email: string; message: string } | null>(null);
