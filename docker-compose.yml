@@ -258,6 +258,18 @@ services:
     ports:
       - "5173:80"
 
+  tileserver:
+    image: maptiler/tileserver-gl:latest
+    container_name: shuttle_tileserver
+    profiles: ["tiles"]
+    restart: unless-stopped
+    volumes:
+      - ./infra/tiles/data:/data:ro
+      - ./infra/tiles/config.json:/data/config.json:ro
+    command: ["--config", "/data/config.json", "--port", "8080"]
+    ports:
+      - "8088:8080"
+
 volumes:
   postgis_data:
     name: shuttle_postgis_data

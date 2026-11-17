@@ -14,6 +14,7 @@ export class RoadGraph {
   public static activeInstance: RoadGraph | null = null;
   public nodes: Map<string, LatLng> = new Map();
   public adjacency: Map<string, GraphNeighbor[]> = new Map();
+  public reverseAdjacency: Map<string, GraphNeighbor[]> = new Map();
 
   constructor() {
     RoadGraph.activeInstance = this;
@@ -24,14 +25,27 @@ export class RoadGraph {
     if (!this.adjacency.has(node.id)) {
       this.adjacency.set(node.id, []);
     }
+    if (!this.reverseAdjacency.has(node.id)) {
+      this.reverseAdjacency.set(node.id, []);
+    }
   }
 
   public addEdge(edge: RoadEdge): void {
     if (!this.adjacency.has(edge.source)) {
       this.adjacency.set(edge.source, []);
     }
+    if (!this.reverseAdjacency.has(edge.target)) {
+      this.reverseAdjacency.set(edge.target, []);
+    }
     this.adjacency.get(edge.source)!.push({
       targetNodeId: edge.target,
+      distanceM: edge.distanceM,
+      speedKmh: edge.speedKmh,
+      isOneway: edge.isOneway,
+    });
+    // Incoming edge for backward search: target <- source
+    this.reverseAdjacency.get(edge.target)!.push({
+      targetNodeId: edge.source,
       distanceM: edge.distanceM,
       speedKmh: edge.speedKmh,
       isOneway: edge.isOneway,
@@ -42,8 +56,17 @@ export class RoadGraph {
       if (!this.adjacency.has(edge.target)) {
         this.adjacency.set(edge.target, []);
       }
+      if (!this.reverseAdjacency.has(edge.source)) {
+        this.reverseAdjacency.set(edge.source, []);
+      }
       this.adjacency.get(edge.target)!.push({
         targetNodeId: edge.source,
+        distanceM: edge.distanceM,
+        speedKmh: edge.speedKmh,
+        isOneway: false,
+      });
+      this.reverseAdjacency.get(edge.source)!.push({
+        targetNodeId: edge.target,
         distanceM: edge.distanceM,
         speedKmh: edge.speedKmh,
         isOneway: false,
@@ -53,6 +76,10 @@ export class RoadGraph {
 
   public getNeighbors(nodeId: string): GraphNeighbor[] {
     return this.adjacency.get(nodeId) || [];
+  }
+
+  public getReverseNeighbors(nodeId: string): GraphNeighbor[] {
+    return this.reverseAdjacency.get(nodeId) || [];
   }
 
   public getNode(nodeId: string): LatLng | undefined {

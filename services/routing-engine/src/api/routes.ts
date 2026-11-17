@@ -3,25 +3,33 @@ import { z } from 'zod';
 import { RoadGraph } from '../graph/graph.js';
 import { findShortestPathDijkstra } from '../routing/dijkstra.js';
 import { findShortestPathAStar } from '../routing/astar.js';
+import { findShortestPathBidirectional } from '../routing/bidirectional.js';
 import { pool } from '../graph/db.js';
 import { RouteOverlapMatcher } from '../matching/matcher.js';
 import { MultiStopOptimizer } from '../matching/multiStop.js';
+import { LatLng, RouteLegSummary } from '../types/index.js';
+import { createRateLimiter } from './rateLimit.js';
 
 export function createRouter(graph: RoadGraph): Router {
   const router = Router();
-  const matcher = new RouteOverlapMatcher(2500); // 2.5 km detour threshold limit
+  const matcher = new RouteOverlapMatcher(2500, graph); // 2.5 km detour threshold limit
+  const computeRateLimiter = createRateLimiter({
+    windowMs: 60_000,
+    maxRequests: Number(process.env.ROUTING_RATE_LIMIT_PER_MIN || 120),
+    keyPrefix: 'routing-compute',
+  });
+
+  const LatLngPointSchema = z.object({
+    lat: z.number().min(-90).max(90),
+    lng: z.number().min(-180).max(180),
+  });
 
   const RouteSchema = z.object({
-    origin: z.object({
-      lat: z.number().min(-90).max(90),
-      lng: z.number().min(-180).max(180),
-    }),
-    destination: z.object({
-      lat: z.number().min(-90).max(90),
-      lng: z.number().min(-180).max(180),
-    }),
+    origin: LatLngPointSchema,
+    destination: LatLngPointSchema,
+    waypoints: z.array(LatLngPointSchema).optional(),
     mode: z.enum(['distance', 'time']).optional().default('distance'),
-    algorithm: z.enum(['dijkstra', 'astar']).optional().default('dijkstra'),
+    algorithm: z.enum(['dijkstra', 'astar', 'bidirectional']).optional().default('dijkstra'),
   });
 
   const RideOfferSchema = z.object({
@@ -72,13 +80,13 @@ export function createRouter(graph: RoadGraph): Router {
         edgeCount: graph.edgeCount,
         spatialIndex: 'GiST (PostGIS) / R-Tree In-Memory',
       },
-      capabilities: ['dijkstra', 'astar', 'route-overlap-matcher', 'nearest-neighbour', '2-opt-optimizer'],
+      capabilities: ['dijkstra', 'astar', 'bidirectional-astar', 'route-overlap-matcher', 'nearest-neighbour', '2-opt-optimizer'],
       timestamp: new Date().toISOString(),
     });
   });
 
-  // 2. /route endpoint (Cost Oracle — Step 1.4)
-  router.post('/route', async (req: Request, res: Response) => {
+  // 2. /route endpoint (Cost Oracle — Step 1.4 & Contract C1 Multi-Waypoint Support)
+  router.post('/route', computeRateLimiter, async (req: Request, res: Response) => {
     const parseResult = RouteSchema.safeParse(req.body);
     if (!parseResult.success) {
       res.status(400).json({
@@ -88,43 +96,80 @@ export function createRouter(graph: RoadGraph): Router {
       return;
     }
 
-    const { origin, destination, mode, algorithm } = parseResult.data;
+    const { origin, destination, waypoints, mode, algorithm } = parseResult.data;
 
     try {
-      // Snap origin and destination to nearest nodes (PostGIS KNN or In-Memory Spatial)
-      const snappedOrigin = await RoadGraph.snapToNearestNode(origin, graph);
-      const snappedDestination = await RoadGraph.snapToNearestNode(destination, graph);
+      const sequencePoints: LatLng[] = [origin, ...(waypoints || []), destination];
+      const snappedPoints = await Promise.all(
+        sequencePoints.map((pt) => RoadGraph.snapToNearestNode(pt, graph))
+      );
 
-      if (!snappedOrigin || !snappedDestination) {
+      if (snappedPoints.some((s) => !s)) {
         res.status(404).json({
           error: 'Could not snap coordinates to road network. Make sure graph is loaded.',
         });
         return;
       }
 
-      // Run selected routing algorithm (Dijkstra or A*)
-      const routeResult =
-        algorithm === 'astar'
-          ? findShortestPathAStar(graph, snappedOrigin.nodeId, snappedDestination.nodeId, { mode })
-          : findShortestPathDijkstra(graph, snappedOrigin.nodeId, snappedDestination.nodeId, { mode });
+      const validSnapped = snappedPoints as NonNullable<(typeof snappedPoints)[0]>[];
+      let totalDistanceM = 0;
+      let totalEtaSeconds = 0;
+      let totalNodesExpanded = 0;
+      const combinedPath: LatLng[] = [];
+      const combinedNodePath: string[] = [];
+      const legs: RouteLegSummary[] = [];
 
-      if (!routeResult) {
-        res.status(404).json({
-          error: 'No path found between origin and destination in road network',
+      for (let i = 0; i < validSnapped.length - 1; i++) {
+        const fromSnap = validSnapped[i];
+        const toSnap = validSnapped[i + 1];
+
+        const legResult =
+          algorithm === 'bidirectional'
+            ? findShortestPathBidirectional(graph, fromSnap.nodeId, toSnap.nodeId, { mode })
+            : algorithm === 'astar'
+            ? findShortestPathAStar(graph, fromSnap.nodeId, toSnap.nodeId, { mode })
+            : findShortestPathDijkstra(graph, fromSnap.nodeId, toSnap.nodeId, { mode });
+
+        if (!legResult) {
+          res.status(404).json({
+            error: 'No path found between origin and destination in road network',
+          });
+          return;
+        }
+
+        totalDistanceM += legResult.distanceM;
+        totalEtaSeconds += legResult.etaSeconds;
+        totalNodesExpanded += legResult.nodesExpanded;
+
+        if (i === 0) {
+          combinedPath.push(...legResult.path);
+          combinedNodePath.push(...legResult.nodePath);
+        } else {
+          combinedPath.push(...legResult.path.slice(1));
+          combinedNodePath.push(...legResult.nodePath.slice(1));
+        }
+
+        legs.push({
+          from: sequencePoints[i],
+          to: sequencePoints[i + 1],
+          distanceM: legResult.distanceM,
+          etaSeconds: legResult.etaSeconds,
+          nodeCount: legResult.nodePath.length,
+          nodesExpanded: legResult.nodesExpanded,
         });
-        return;
       }
 
       res.json({
         algorithm,
         mode,
-        distanceM: routeResult.distanceM,
-        etaSeconds: routeResult.etaSeconds,
-        path: routeResult.path,
-        nodeCount: routeResult.nodePath.length,
-        nodesExpanded: routeResult.nodesExpanded,
-        snappedOrigin,
-        snappedDestination,
+        distanceM: Math.round(totalDistanceM * 100) / 100,
+        etaSeconds: Math.round(totalEtaSeconds * 100) / 100,
+        path: combinedPath,
+        nodeCount: combinedNodePath.length,
+        nodesExpanded: totalNodesExpanded,
+        snappedOrigin: validSnapped[0],
+        snappedDestination: validSnapped[validSnapped.length - 1],
+        ...(waypoints && waypoints.length > 0 ? { legs } : {}),
       });
     } catch (err) {
       console.error('[Route API] Error computing route:', err);
@@ -133,7 +178,7 @@ export function createRouter(graph: RoadGraph): Router {
   });
 
   // 3. /rides endpoint — Create & List Ride Offers and Requests (Step 3.4)
-  router.post('/rides', (req: Request, res: Response) => {
+  router.post('/rides', async (req: Request, res: Response) => {
     const parseResult = RideOfferSchema.safeParse(req.body);
     if (!parseResult.success) {
       res.status(400).json({ error: 'Invalid ride submission', details: parseResult.error.format() });
@@ -144,6 +189,7 @@ export function createRouter(graph: RoadGraph): Router {
     const id = `${data.type}-${Date.now()}`;
 
     if (data.type === 'offer') {
+      const womenOnlyResolved = await matcher.resolveWomenOnlyPreference(data.userId, data.womenOnly);
       const offer = {
         id,
         userId: data.userId,
@@ -151,13 +197,14 @@ export function createRouter(graph: RoadGraph): Router {
         origin: data.origin,
         destination: data.destination,
         timeWindowStart: data.timeWindowStart || '08:00 AM',
-        womenOnly: data.womenOnly,
+        womenOnly: womenOnlyResolved,
         seatsAvailable: data.seats,
         vehicle: data.vehicle || 'Standard Vehicle',
       };
-      matcher.addOffer(offer);
+      await matcher.persistOfferToDb(offer);
       res.status(201).json({ message: 'Ride offer published successfully', data: offer });
     } else {
+      const womenOnlyResolved = await matcher.resolveWomenOnlyPreference(data.userId, data.womenOnly);
       const request = {
         id,
         userId: data.userId,
@@ -165,31 +212,41 @@ export function createRouter(graph: RoadGraph): Router {
         origin: data.origin,
         destination: data.destination,
         timeWindowStart: data.timeWindowStart || '08:00 AM',
-        womenOnly: data.womenOnly,
+        womenOnly: womenOnlyResolved,
         seatsNeeded: data.seats,
       };
-      matcher.addRequest(request);
+      await matcher.persistRequestToDb(request);
       res.status(201).json({ message: 'Ride request published successfully', data: request });
     }
   });
 
   router.get('/rides', (_req: Request, res: Response) => {
     res.json({
-      offers: matcher.getOffers(),
-      requests: matcher.getRequests(),
+      offers: matcher.getPublicOffers(),
+      requests: matcher.getPublicRequests(),
     });
   });
 
   // 4. /matches endpoint — Ranked Candidate Matches with Detour Limit (Step 3.3 & 3.4)
-  router.get('/matches', (req: Request, res: Response) => {
-    const { requestId, offerId } = req.query;
+  router.get('/matches', computeRateLimiter, (req: Request, res: Response) => {
+    const { requestId, offerId, rideId, greedy } = req.query;
+    const targetRideId = (rideId || requestId) as string | undefined;
 
-    if (requestId) {
-      const matches = matcher.findMatchesForRequest(requestId as string);
+    if (targetRideId) {
+      const asRequest = matcher.findMatchesForRequest(targetRideId);
+      if (asRequest.length > 0 || matcher.getRequestById(targetRideId)) {
+        res.json({
+          requestId: targetRideId,
+          matchesCount: asRequest.length,
+          matches: asRequest,
+        });
+        return;
+      }
+      const asOffer = matcher.findMatchesForOffer(targetRideId);
       res.json({
-        requestId,
-        matchesCount: matches.length,
-        matches,
+        offerId: targetRideId,
+        matchesCount: asOffer.length,
+        matches: asOffer,
       });
       return;
     }
@@ -200,6 +257,16 @@ export function createRouter(graph: RoadGraph): Router {
         offerId,
         matchesCount: matches.length,
         matches,
+      });
+      return;
+    }
+
+    if (greedy === 'true') {
+      const selected = matcher.greedySelectAllMatches();
+      res.json({
+        strategy: 'greedy-overlap-selection',
+        matchesCount: selected.length,
+        matches: selected,
       });
       return;
     }
@@ -234,6 +301,29 @@ export function createRouter(graph: RoadGraph): Router {
     });
   });
 
+  // 4b. Confirm match & publish route_boundaries to Module 4 Safety (Contract C2)
+  router.post('/matches/confirm', async (req: Request, res: Response) => {
+    const { offerId, requestId, tripId } = req.body || {};
+    if (!offerId || !requestId) {
+      res.status(400).json({ error: 'Both offerId and requestId are required to confirm a match' });
+      return;
+    }
+
+    const result = await matcher.confirmMatch(offerId, requestId, tripId ? Number(tripId) : undefined);
+    if (!result) {
+      res.status(404).json({
+        error: 'Could not confirm match: offer/request not found or constraints violated',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      message: 'Match confirmed and planned route boundary published for Module 4 anomaly monitoring',
+      match: result.match,
+      routeBoundaryPublished: result.routeBoundaryPublished,
+    });
+  });
+
   // 5. /multi-stop/order endpoint — NN + 2-opt Tour Optimization (Step 3.1 & 3.2)
   router.post('/multi-stop/order', (req: Request, res: Response) => {
     const parseResult = MultiStopSchema.safeParse(req.body);
@@ -255,7 +345,7 @@ export function createRouter(graph: RoadGraph): Router {
       riderId: s.riderId,
     }));
 
-    const result = MultiStopOptimizer.optimizeMultiStopTour(originPoint, stopPoints, destPoint);
+    const result = MultiStopOptimizer.optimizeMultiStopTour(originPoint, stopPoints, destPoint, graph);
     res.json({
       algorithm: 'Nearest-Neighbour + 2-opt Heuristic',
       ...result,
@@ -332,7 +422,7 @@ export function createRouter(graph: RoadGraph): Router {
         '/route': {
           post: {
             tags: ['Routing'],
-            summary: 'Compute optimal route between origin and destination',
+            summary: 'Compute optimal route between origin and destination (supports ordered waypoints)',
             description: 'Snaps GPS coordinates and computes optimal path using Dijkstra or A* search.',
             requestBody: {
               required: true,
@@ -352,8 +442,16 @@ export function createRouter(graph: RoadGraph): Router {
                         properties: { lat: { type: 'number', example: 6.7969 }, lng: { type: 'number', example: 79.9018 } },
                         required: ['lat', 'lng'],
                       },
+                      waypoints: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: { lat: { type: 'number' }, lng: { type: 'number' } },
+                          required: ['lat', 'lng'],
+                        },
+                      },
                       mode: { type: 'string', enum: ['distance', 'time'], default: 'distance' },
-                      algorithm: { type: 'string', enum: ['dijkstra', 'astar'], default: 'astar' },
+                      algorithm: { type: 'string', enum: ['dijkstra', 'astar', 'bidirectional'], default: 'astar' },
                     },
                   },
                 },
