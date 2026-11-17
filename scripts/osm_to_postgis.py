@@ -50,11 +50,12 @@ def haversine_m(lat1, lon1, lat2, lon2):
     return r * c
 
 class RoadNetworkHandler(osmium.SimpleHandler):
-    def __init__(self, max_edges=None):
+    def __init__(self, max_edges=None, bbox=None):
         super().__init__()
         self.nodes = {}       # node_id -> (lat, lon)
         self.edges = []       # [(source, target, distance_m, speed_kmh, is_oneway, line_wkt)]
         self.max_edges = max_edges
+        self.bbox = bbox      # (min_lat, min_lon, max_lat, max_lon)
 
     def way(self, w):
         if self.max_edges and len(self.edges) >= self.max_edges:
@@ -80,6 +81,11 @@ class RoadNetworkHandler(osmium.SimpleHandler):
             # Nodes without location cache
             return
 
+        if self.bbox is not None:
+            min_lat, min_lon, max_lat, max_lon = self.bbox
+            if not any(min_lat <= lat <= max_lat and min_lon <= lon <= max_lon for _, lat, lon in coords):
+                return
+
         for i in range(len(coords) - 1):
             n1_id, lat1, lon1 = coords[i]
             n2_id, lat2, lon2 = coords[i + 1]
@@ -98,9 +104,9 @@ class RoadNetworkHandler(osmium.SimpleHandler):
             else:
                 self.edges.append((n1_id, n2_id, dist_m, speed, is_oneway, line_wkt))
 
-def import_to_postgis(pbf_path, limit_edges=None):
-    print(f"[ETL] Parsing OSM PBF: {pbf_path}")
-    handler = RoadNetworkHandler(max_edges=limit_edges)
+def import_to_postgis(pbf_path, limit_edges=None, bbox=(6.74, 79.82, 7.02, 80.04)):
+    print(f"[ETL] Parsing OSM PBF: {pbf_path} (bbox={bbox})")
+    handler = RoadNetworkHandler(max_edges=limit_edges, bbox=bbox)
     
     # Use location cache to enable node coordinates inside ways
     handler.apply_file(pbf_path, locations=True, idx='flex_mem')
@@ -113,23 +119,23 @@ def import_to_postgis(pbf_path, limit_edges=None):
 
     try:
         print("[ETL] Clearing existing graph tables...")
-        cur.execute("TRUNCATE road_edges, road_nodes RESTART IDENTITY CASCADE;")
+        cur.execute("TRUNCATE public.road_edges, public.road_nodes RESTART IDENTITY CASCADE;")
 
-        print(f"[ETL] Inserting {len(handler.nodes)} nodes into road_nodes...")
+        print(f"[ETL] Inserting {len(handler.nodes)} nodes into public.road_nodes...")
         node_records = [
             (nid, f"SRID=4326;POINT({lon} {lat})")
             for nid, (lat, lon) in handler.nodes.items()
         ]
         execute_batch(
             cur,
-            "INSERT INTO road_nodes (id, geom) VALUES (%s, ST_GeomFromEWKT(%s)) ON CONFLICT (id) DO NOTHING;",
+            "INSERT INTO public.road_nodes (id, geom) VALUES (%s, ST_GeomFromEWKT(%s)) ON CONFLICT (id) DO NOTHING;",
             node_records,
             page_size=5000
         )
         conn.commit()
         print("[ETL] Nodes inserted.")
 
-        print(f"[ETL] Inserting {len(handler.edges)} edges into road_edges...")
+        print(f"[ETL] Inserting {len(handler.edges)} edges into public.road_edges...")
         edge_records = [
             (src, tgt, round(dist, 2), speed, is_oneway, line_wkt)
             for src, tgt, dist, speed, is_oneway, line_wkt in handler.edges
@@ -137,7 +143,7 @@ def import_to_postgis(pbf_path, limit_edges=None):
         execute_batch(
             cur,
             """
-            INSERT INTO road_edges (source, target, distance_m, speed_kmh, is_oneway, geom)
+            INSERT INTO public.road_edges (source, target, distance_m, speed_kmh, is_oneway, geom)
             VALUES (%s, %s, %s, %s, %s, ST_GeomFromEWKT(%s));
             """,
             edge_records,
@@ -146,9 +152,9 @@ def import_to_postgis(pbf_path, limit_edges=None):
         conn.commit()
         print("[ETL] Edges inserted.")
 
-        cur.execute("SELECT COUNT(*) FROM road_nodes;")
+        cur.execute("SELECT COUNT(*) FROM public.road_nodes;")
         node_cnt = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM road_edges;")
+        cur.execute("SELECT COUNT(*) FROM public.road_edges;")
         edge_cnt = cur.fetchone()[0]
         print(f"[ETL] Ingestion complete! Total road_nodes: {node_cnt}, Total road_edges: {edge_cnt}")
 

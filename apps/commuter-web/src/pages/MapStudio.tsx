@@ -34,17 +34,78 @@ export const MapStudio: React.FC = () => {
   // Detour Threshold Slider (Module 1 matching feature)
   const [detourThresholdM, setDetourThresholdM] = useState(1500);
 
-  // Recompute route whenever waypoints or algorithm changes
+  // Recompute route whenever waypoints or algorithm changes (real OSM PostGIS /route backend with fallback)
   useEffect(() => {
-    if (waypoints.length >= 2) {
-      const result = findMultiStopRoute(waypoints, useAStar);
-      setRouteResult(result);
+    if (waypoints.length < 2) return;
 
-      const smoothPoints = generateInterpolatedPath(result.coordinates, 10);
-      setInterpolatedPoints(smoothPoints);
+    const controller = new AbortController();
+
+    const computeRealRoute = async () => {
+      try {
+        const origin = { lat: waypoints[0].lat, lng: waypoints[0].lng };
+        const destination = {
+          lat: waypoints[waypoints.length - 1].lat,
+          lng: waypoints[waypoints.length - 1].lng,
+        };
+        const middleStops = waypoints
+          .slice(1, -1)
+          .map((w) => ({ lat: w.lat, lng: w.lng }));
+
+        const response = await fetch('/route', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            origin,
+            waypoints: middleStops.length > 0 ? middleStops : undefined,
+            destination,
+            algorithm: useAStar ? 'astar' : 'dijkstra',
+            mode: 'distance',
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Routing API returned ${response.status}`);
+        }
+
+        const data = await response.json();
+        const osmCoords: [number, number][] = (data.path || []).map(
+          (p: { lat: number; lng: number }) => [p.lat, p.lng] as [number, number]
+        );
+
+        if (osmCoords.length >= 2) {
+          const distanceMeters = Math.round(data.distanceM || 0);
+          const durationSeconds = Math.round(data.etaSeconds || 0);
+          const co2SavedKg = Number(((distanceMeters / 1000) * 0.171 * 0.72).toFixed(2));
+
+          setRouteResult({
+            pathNodes: waypoints,
+            coordinates: osmCoords,
+            distanceMeters,
+            durationSeconds,
+            co2SavedKg,
+            nodesExpanded: data.nodesExpanded || osmCoords.length,
+            algorithm: useAStar ? 'A*' : 'Dijkstra',
+          });
+          setInterpolatedPoints(generateInterpolatedPath(osmCoords, 3));
+          setSimIndex(0);
+          setIsSimulating(false);
+          return;
+        }
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
+      }
+
+      // Offline / disconnected fallback
+      const fallback = findMultiStopRoute(waypoints, useAStar);
+      setRouteResult(fallback);
+      setInterpolatedPoints(generateInterpolatedPath(fallback.coordinates, 10));
       setSimIndex(0);
       setIsSimulating(false);
-    }
+    };
+
+    computeRealRoute();
+    return () => controller.abort();
   }, [waypoints, useAStar]);
 
   // Simulation timer
