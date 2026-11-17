@@ -1,4 +1,6 @@
 import { LatLng } from '../types/index.js';
+import { RoadGraph } from '../graph/graph.js';
+import { findShortestPathAStar } from '../routing/astar.js';
 import { haversineDistanceMeters } from '../routing/haversine.js';
 
 export interface MultiStopPoint {
@@ -16,25 +18,72 @@ export interface MultiStopTourResult {
   optimizedDistanceM: number;
   improvementPct: number;
   iterations: number;
+  costMetric?: 'road_graph' | 'haversine_fallback';
 }
 
 /**
  * Multi-Stop Pickup Ordering Engine (Module 1 — Step 3.1 & 3.2)
  * Algorithms:
- * 1. Nearest-Neighbour (NN) Construction
+ * 1. Nearest-Neighbour (NN) Construction (using road graph path cost when graph is loaded)
  * 2. 2-opt Local Search Tour Improvement
  */
 export class MultiStopOptimizer {
   /**
+   * Computes point-to-point travel cost in meters using A* on the road graph
+   * when available, falling back to spherical Haversine distance when disconnected.
+   */
+  public static computePairCostMeters(
+    a: MultiStopPoint,
+    b: MultiStopPoint,
+    graph?: RoadGraph | null
+  ): number {
+    const activeGraph = graph ?? RoadGraph.activeInstance;
+    if (activeGraph && activeGraph.nodeCount > 0) {
+      let startNode: string | null = null;
+      let endNode: string | null = null;
+      let minStartDist = Infinity;
+      let minEndDist = Infinity;
+
+      for (const [nodeId, loc] of activeGraph.nodes.entries()) {
+        const dStart = haversineDistanceMeters({ lat: a.lat, lng: a.lng }, loc);
+        if (dStart < minStartDist) {
+          minStartDist = dStart;
+          startNode = nodeId;
+        }
+        const dEnd = haversineDistanceMeters({ lat: b.lat, lng: b.lng }, loc);
+        if (dEnd < minEndDist) {
+          minEndDist = dEnd;
+          endNode = nodeId;
+        }
+      }
+
+      if (startNode && endNode) {
+        if (startNode === endNode) {
+          return Math.round(haversineDistanceMeters({ lat: a.lat, lng: a.lng }, { lat: b.lat, lng: b.lng }));
+        }
+        const route = findShortestPathAStar(activeGraph, startNode, endNode, { mode: 'distance' });
+        if (route && route.distanceM > 0) {
+          // Include snap-on / snap-off offsets so distinct nearby points remain distinguishable
+          return Math.round(route.distanceM + minStartDist * 0.25 + minEndDist * 0.25);
+        }
+      }
+    }
+
+    return Math.round(
+      haversineDistanceMeters(
+        { lat: a.lat, lng: a.lng },
+        { lat: b.lat, lng: b.lng }
+      )
+    );
+  }
+
+  /**
    * Computes the total path distance for an ordered sequence of stops.
    */
-  public static calculateTourDistance(stops: MultiStopPoint[]): number {
+  public static calculateTourDistance(stops: MultiStopPoint[], graph?: RoadGraph | null): number {
     let dist = 0;
     for (let i = 0; i < stops.length - 1; i++) {
-      dist += haversineDistanceMeters(
-        { lat: stops[i].lat, lng: stops[i].lng },
-        { lat: stops[i + 1].lat, lng: stops[i + 1].lng }
-      );
+      dist += MultiStopOptimizer.computePairCostMeters(stops[i], stops[i + 1], graph);
     }
     return Math.round(dist);
   }
@@ -46,7 +95,8 @@ export class MultiStopOptimizer {
   public static nearestNeighbourTour(
     origin: MultiStopPoint,
     stops: MultiStopPoint[],
-    destination?: MultiStopPoint
+    destination?: MultiStopPoint,
+    graph?: RoadGraph | null
   ): MultiStopPoint[] {
     const unvisited = [...stops];
     const tour: MultiStopPoint[] = [origin];
@@ -57,10 +107,7 @@ export class MultiStopOptimizer {
       let minDistance = Infinity;
 
       for (let i = 0; i < unvisited.length; i++) {
-        const d = haversineDistanceMeters(
-          { lat: current.lat, lng: current.lng },
-          { lat: unvisited[i].lat, lng: unvisited[i].lng }
-        );
+        const d = MultiStopOptimizer.computePairCostMeters(current, unvisited[i], graph);
         if (d < minDistance) {
           minDistance = d;
           nearestIdx = i;
@@ -85,7 +132,8 @@ export class MultiStopOptimizer {
    */
   public static twoOptTour(
     initialTour: MultiStopPoint[],
-    maxIterations: number = 50
+    maxIterations: number = 50,
+    graph?: RoadGraph | null
   ): { tour: MultiStopPoint[]; iterations: number } {
     let tour = [...initialTour];
     let improved = true;
@@ -106,24 +154,12 @@ export class MultiStopOptimizer {
       for (let i = startIndex; i <= endIndex; i++) {
         for (let k = i + 1; k <= endIndex; k++) {
           const d1 =
-            haversineDistanceMeters(
-              { lat: tour[i - 1].lat, lng: tour[i - 1].lng },
-              { lat: tour[i].lat, lng: tour[i].lng }
-            ) +
-            haversineDistanceMeters(
-              { lat: tour[k].lat, lng: tour[k].lng },
-              { lat: tour[k + 1].lat, lng: tour[k + 1].lng }
-            );
+            MultiStopOptimizer.computePairCostMeters(tour[i - 1], tour[i], graph) +
+            MultiStopOptimizer.computePairCostMeters(tour[k], tour[k + 1], graph);
 
           const d2 =
-            haversineDistanceMeters(
-              { lat: tour[i - 1].lat, lng: tour[i - 1].lng },
-              { lat: tour[k].lat, lng: tour[k].lng }
-            ) +
-            haversineDistanceMeters(
-              { lat: tour[i].lat, lng: tour[i].lng },
-              { lat: tour[k + 1].lat, lng: tour[k + 1].lng }
-            );
+            MultiStopOptimizer.computePairCostMeters(tour[i - 1], tour[k], graph) +
+            MultiStopOptimizer.computePairCostMeters(tour[i], tour[k + 1], graph);
 
           if (d2 < d1) {
             // Reverse segment from i to k
@@ -152,18 +188,22 @@ export class MultiStopOptimizer {
   public static optimizeMultiStopTour(
     origin: MultiStopPoint,
     stops: MultiStopPoint[],
-    destination?: MultiStopPoint
+    destination?: MultiStopPoint,
+    graph?: RoadGraph | null
   ): MultiStopTourResult {
-    // 1. Initial order (as provided or straightforward)
+    const activeGraph = graph ?? RoadGraph.activeInstance;
+    const costMetric = activeGraph && activeGraph.nodeCount > 0 ? 'road_graph' : 'haversine_fallback';
+
+    // 1. Initial order (as provided)
     const rawTour = [origin, ...stops, ...(destination ? [destination] : [])];
-    const initialDistanceM = MultiStopOptimizer.calculateTourDistance(rawTour);
+    const initialDistanceM = MultiStopOptimizer.calculateTourDistance(rawTour, activeGraph);
 
     // 2. Nearest-Neighbour Construction
-    const nnTour = MultiStopOptimizer.nearestNeighbourTour(origin, stops, destination);
+    const nnTour = MultiStopOptimizer.nearestNeighbourTour(origin, stops, destination, activeGraph);
 
     // 3. 2-opt Improvement
-    const { tour: optimizedTour, iterations } = MultiStopOptimizer.twoOptTour(nnTour);
-    const optimizedDistanceM = MultiStopOptimizer.calculateTourDistance(optimizedTour);
+    const { tour: optimizedTour, iterations } = MultiStopOptimizer.twoOptTour(nnTour, 50, activeGraph);
+    const optimizedDistanceM = MultiStopOptimizer.calculateTourDistance(optimizedTour, activeGraph);
 
     const improvementPct =
       initialDistanceM > 0
@@ -176,6 +216,7 @@ export class MultiStopOptimizer {
       optimizedDistanceM,
       improvementPct: Math.max(0, improvementPct),
       iterations,
+      costMetric,
     };
   }
 }

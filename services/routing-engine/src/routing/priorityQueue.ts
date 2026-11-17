@@ -14,6 +14,10 @@ export class MinPriorityQueue<T> {
     return this.heap.length === 0;
   }
 
+  public peek(): QueueElement<T> | undefined {
+    return this.heap[0];
+  }
+
   public push(item: T, priority: number): void {
     this.heap.push({ item, priority });
     this.bubbleUp(this.heap.length - 1);
