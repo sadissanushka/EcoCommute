@@ -326,4 +326,119 @@ describe('Module 2 - Booking Service Tests (Interim Step 1.5)', () => {
       expect(res.body.success).toBe(true);
     });
   });
+
+  describe('Cancelled booking visibility', () => {
+    test('Hiding a booking requires authentication', async () => {
+      const res = await request(app).post('/bookings/105/hide');
+
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    test('An employee cannot hide another employee booking', async () => {
+      const mockClient = {
+        query: jest.fn()
+          .mockResolvedValueOnce({ rows: [] }) // BEGIN
+          .mockResolvedValueOnce({
+            rows: [{ id: 105, user_id: 8, status: 'cancelled' }],
+          })
+          .mockResolvedValueOnce({ rows: [] }), // ROLLBACK
+        release: jest.fn(),
+      };
+      (jest.spyOn(pool, 'connect') as any).mockImplementationOnce(async () => mockClient);
+
+      const res = await request(app)
+        .post('/bookings/105/hide')
+        .set('Authorization', 'Bearer ' + makeToken(10));
+
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe('FORBIDDEN');
+      expect(mockClient.query).not.toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO booking.hidden_bookings'),
+        expect.anything()
+      );
+    });
+
+    test.each(['confirmed', 'boarded'])(
+      'A %s booking cannot be hidden',
+      async (status) => {
+        const mockClient = {
+          query: jest.fn()
+            .mockResolvedValueOnce({ rows: [] }) // BEGIN
+            .mockResolvedValueOnce({
+              rows: [{ id: 105, user_id: 10, status }],
+            })
+            .mockResolvedValueOnce({ rows: [] }), // ROLLBACK
+          release: jest.fn(),
+        };
+        (jest.spyOn(pool, 'connect') as any).mockImplementationOnce(async () => mockClient);
+
+        const res = await request(app)
+          .post('/bookings/105/hide')
+          .set('Authorization', 'Bearer ' + makeToken(10));
+
+        expect(res.status).toBe(409);
+        expect(res.body.error.code).toBe('BOOKING_NOT_CANCELLED');
+        expect(mockClient.query).not.toHaveBeenCalledWith(
+          expect.stringContaining('INSERT INTO booking.hidden_bookings'),
+          expect.anything()
+        );
+      }
+    );
+
+    test('The owner can hide a cancelled booking repeatedly without changing its history or seats', async () => {
+      const makeMockClient = () => ({
+        query: jest.fn()
+          .mockResolvedValueOnce({ rows: [] }) // BEGIN
+          .mockResolvedValueOnce({
+            rows: [{ id: 105, user_id: 10, status: 'cancelled' }],
+          })
+          .mockResolvedValueOnce({ rows: [] }) // idempotent visibility insert
+          .mockResolvedValueOnce({ rows: [] }), // COMMIT
+        release: jest.fn(),
+      });
+      const firstClient = makeMockClient();
+      const secondClient = makeMockClient();
+      (jest.spyOn(pool, 'connect') as any)
+        .mockImplementationOnce(async () => firstClient)
+        .mockImplementationOnce(async () => secondClient);
+      const token = makeToken(10);
+
+      const firstRes = await request(app)
+        .post('/bookings/105/hide')
+        .set('Authorization', 'Bearer ' + token);
+      const secondRes = await request(app)
+        .post('/bookings/105/hide')
+        .set('Authorization', 'Bearer ' + token);
+
+      expect(firstRes.status).toBe(200);
+      expect(secondRes.status).toBe(200);
+      for (const client of [firstClient, secondClient]) {
+        expect(client.query).toHaveBeenNthCalledWith(
+          3,
+          expect.stringContaining('ON CONFLICT (booking_id, user_id) DO NOTHING'),
+          [105, 10]
+        );
+        expect(
+          client.query.mock.calls.some(([query]) =>
+            /UPDATE booking\.(bookings|seat_assignments)|DELETE FROM booking\.bookings/i.test(query)
+          )
+        ).toBe(false);
+      }
+    });
+
+    test('My Bookings excludes only records hidden by the authenticated user', async () => {
+      const querySpy = jest.spyOn(pool, 'query') as any;
+      querySpy.mockResolvedValueOnce({ rows: [] });
+
+      const res = await request(app)
+        .get('/bookings/me')
+        .set('Authorization', 'Bearer ' + makeToken(10));
+
+      expect(res.status).toBe(200);
+      expect(querySpy.mock.calls[0][0]).toContain('booking.hidden_bookings');
+      expect(querySpy.mock.calls[0][0]).toContain('hb.user_id = $1');
+      expect(querySpy.mock.calls[0][1]).toEqual([10]);
+    });
+  });
 });

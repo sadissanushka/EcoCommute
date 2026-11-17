@@ -7,21 +7,93 @@ interface BookRideProps {
   onNavigateHome: () => void;
 }
 
+
 export const BookRide: React.FC<BookRideProps> = ({ onSelectTrip, onNavigateHome }) => {
   const [trips, setTrips] = useState<ShuttleTrip[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pickup, setPickup] = useState('Galle Face Center Rd, Colombo 03');
-  const [destination, setDestination] = useState('WTC Colombo 01 (Port City Corridor)');
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  const [pickup, setPickup] = useState('');
+  const [destination, setDestination] = useState('');
+  const [travelDate, setTravelDate] = useState('');
+
   const [selectedTripIndex, setSelectedTripIndex] = useState(0);
 
+  // Initial load: retrieve real scheduled trips from the backend.
   useEffect(() => {
-    bookingApi.getTrips().then((res) => {
-      setTrips(res);
-      setLoading(false);
-    }).catch(() => {
-      setLoading(false);
-    });
+    let isMounted = true;
+
+    const loadInitialTrips = async () => {
+      try {
+        setLoading(true);
+        setSearchError(null);
+
+        const results = await bookingApi.getTrips();
+
+        if (isMounted) {
+          setTrips(results);
+          setSelectedTripIndex(0);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setTrips([]);
+          setSearchError(
+            error instanceof Error
+              ? error.message
+              : 'Unable to load shuttle trips.'
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadInitialTrips();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
+  // Search using the employee's entered locations and travel date.
+  const handleSearch = async () => {
+    if (!pickup.trim() || !destination.trim()) {
+      setSearchError('Please enter both pickup and destination locations.');
+      return;
+    }
+
+    if (pickup.trim().toLowerCase() === destination.trim().toLowerCase()) {
+      setSearchError('Pickup and destination cannot be the same.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setSearchError(null);
+      setTrips([]);
+      setSelectedTripIndex(0);
+
+      const results = await bookingApi.getTrips({
+        origin: pickup.trim(),
+        destination: destination.trim(),
+        date: travelDate || undefined,
+        seatsNeeded: 1,
+      });
+
+      setTrips(results);
+    } catch (error) {
+      setTrips([]);
+      setSearchError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to search for shuttle trips.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const activeTrip = trips[selectedTripIndex] || null;
 
@@ -57,17 +129,6 @@ export const BookRide: React.FC<BookRideProps> = ({ onSelectTrip, onNavigateHome
           <circle cx="320" cy="680" r="3" fill="#ffffff" />
         </svg>
 
-        {/* Live Shuttle Telematics Pin */}
-        <div className="absolute top-[42%] left-[48%] -translate-x-1/2 -translate-y-1/2 cursor-pointer z-10">
-          <div className="flex flex-col items-center group">
-            <div className="bg-secondary text-on-secondary px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 border border-white/30 animate-bounce">
-              <span className="material-symbols-outlined text-[16px]">directions_bus</span>
-              <span className="text-xs font-bold whitespace-nowrap">8 min away</span>
-            </div>
-            <div className="w-2.5 h-2.5 bg-secondary rotate-45 -mt-1 shadow-sm"></div>
-            <div className="w-2.5 h-2.5 rounded-full bg-secondary/40 animate-ping mt-1"></div>
-          </div>
-        </div>
       </div>
 
       {/* Top Section: Minimal Unified Floating Search Pill & Quick Chips */}
@@ -115,6 +176,35 @@ export const BookRide: React.FC<BookRideProps> = ({ onSelectTrip, onNavigateHome
             </div>
           </div>
 
+
+
+            {/* Travel Date */}
+            <div className="flex items-center gap-2 px-2 pt-2">
+              <span className="material-symbols-outlined text-primary text-[18px]">
+                calendar_month
+              </span>
+
+              <input
+                type="date"
+                value={travelDate}
+                min={new Date().toISOString().split('T')[0]}
+                onChange={(e) => setTravelDate(e.target.value)}
+                className="flex-1 bg-transparent py-2 text-xs font-semibold text-on-surface outline-none"
+              />
+            </div>
+
+            {/* Search Button */}
+            <button
+              type="button"
+              onClick={handleSearch}
+              disabled={loading}
+              className="w-full bg-primary text-on-primary rounded-xl py-3 text-sm font-bold shadow-md hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              {loading ? 'SEARCHING...' : 'SEARCH SHUTTLES'}
+            </button>
+
+
+
           {/* Quick Chips */}
           <div className="flex gap-2 overflow-x-auto pt-0.5 no-scrollbar">
             <button
@@ -142,57 +232,116 @@ export const BookRide: React.FC<BookRideProps> = ({ onSelectTrip, onNavigateHome
         </div>
       </div>
 
-      {/* Lower Section: Elevated Floating Bottom Card Module */}
+      {/* Lower Section: Real Backend Search Results */}
       <div className="absolute bottom-20 left-4 right-4 z-20 max-w-md mx-auto">
-        <div className="bg-surface/95 backdrop-blur-xl rounded-2xl shadow-2xl p-4 flex flex-col gap-3 border border-white/60">
-          {/* Top Row: Metric Widgets */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-surface-container-lowest p-3 rounded-xl shadow-sm flex flex-col gap-1 border border-outline-variant/30">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-on-surface-variant uppercase tracking-wider font-semibold">
-                  CO2 SAVED
-                </span>
-                <span className="material-symbols-outlined text-primary text-[18px]">eco</span>
-              </div>
-              <span className="text-xl font-bold text-primary leading-tight">12.4kg</span>
-            </div>
+        <div className="bg-surface/95 backdrop-blur-xl rounded-2xl shadow-2xl p-4 flex flex-col gap-3 border border-white/60 max-h-[45vh] overflow-y-auto">
 
-            <div className="bg-surface-container-lowest p-3 rounded-xl shadow-sm flex flex-col gap-1 border border-outline-variant/30">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-on-surface-variant uppercase tracking-wider font-semibold">
-                  CAPACITY
-                </span>
-                <span className="material-symbols-outlined text-secondary text-[18px]">group</span>
-              </div>
-              <span className="text-xl font-bold text-secondary leading-tight">
-                {activeTrip ? `${Math.round(((14 - activeTrip.availableSeats) / 14) * 100)}%` : '86%'}
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-on-surface">
+              Available Shuttles
+            </h2>
+
+            <span className="text-xs text-on-surface-variant">
+              {trips.length} found
+            </span>
+          </div>
+
+          {/* Loading */}
+          {loading && (
+            <div className="py-6 text-center">
+              <div className="animate-spin w-7 h-7 border-4 border-primary border-t-transparent rounded-full mx-auto mb-2"></div>
+              <p className="text-sm text-on-surface-variant">
+                Finding available shuttles...
+              </p>
+            </div>
+          )}
+
+          {/* Error */}
+          {!loading && searchError && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+              <p className="text-sm font-semibold text-red-700">
+                Search failed
+              </p>
+              <p className="text-xs text-red-600 mt-1">
+                {searchError}
+              </p>
+            </div>
+          )}
+
+          {/* No Results */}
+          {!loading && !searchError && trips.length === 0 && (
+            <div className="py-6 text-center">
+              <span className="material-symbols-outlined text-3xl text-on-surface-variant">
+                directions_bus
               </span>
-            </div>
-          </div>
 
-          {/* Active Departure Banner */}
-          <div className="bg-primary text-on-primary rounded-xl p-3 shadow-lg flex items-center justify-between">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-11 h-11 bg-on-primary/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                <span className="material-symbols-outlined text-[26px]">directions_bus</span>
-              </div>
-              <div className="truncate">
-                <h3 className="text-base font-bold leading-tight">
-                  {activeTrip?.routeName || 'Line 14-B Express'}
-                </h3>
-                <p className="text-xs opacity-90 leading-normal">
-                  Departing in <span className="font-bold underline underline-offset-2">3 mins</span> (11 seats free)
-                </p>
-              </div>
-            </div>
+              <p className="text-sm font-semibold text-on-surface mt-2">
+                No shuttles found
+              </p>
 
-            <button
-              onClick={() => onSelectTrip(activeTrip?.id || 1)}
-              className="bg-on-primary text-primary px-4 py-2 rounded-full text-xs font-bold shadow-md hover:brightness-110 active:scale-95 transition-all flex-shrink-0 ml-2 cursor-pointer"
+              <p className="text-xs text-on-surface-variant mt-1">
+                Try different pickup or destination locations.
+              </p>
+            </div>
+          )}
+
+          {/* Real Search Results */}
+          {!loading && !searchError && trips.map((trip, index) => (
+            <div
+              key={trip.id}
+              className={`rounded-xl border p-3 flex flex-col gap-2 ${
+                selectedTripIndex === index
+                  ? 'border-primary bg-primary/5'
+                  : 'border-outline-variant/50 bg-surface-container-lowest'
+              }`}
             >
-              BOOK NOW
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => setSelectedTripIndex(index)}
+                className="text-left w-full"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-sm text-on-surface">
+                      {trip.routeName || `Shuttle Trip #${trip.id}`}
+                    </h3>
+
+                    <p className="text-xs text-on-surface-variant mt-1">
+                      {trip.originName} → {trip.destinationName}
+                    </p>
+                  </div>
+
+                  <span className="text-xs font-bold text-primary whitespace-nowrap">
+                    {trip.availableSeats} seats free
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-on-surface-variant">
+                  <span>
+                    <span className="material-symbols-outlined text-[14px] align-middle mr-1">
+                      schedule
+                    </span>
+                    {trip.departAt
+                      ? new Date(trip.departAt).toLocaleString()
+                      : 'Departure time unavailable'}
+                  </span>
+
+                  <span>
+                    {trip.vehicle?.type || 'Vehicle information unavailable'}
+                  </span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onSelectTrip(trip.id)}
+                disabled={trip.availableSeats < 1}
+                className="w-full bg-primary text-on-primary rounded-full px-4 py-2.5 text-xs font-bold shadow-md hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                {trip.availableSeats > 0 ? 'BOOK THIS SHUTTLE' : 'FULL'}
+              </button>
+            </div>
+          ))}
         </div>
       </div>
     </div>

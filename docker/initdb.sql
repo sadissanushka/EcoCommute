@@ -183,6 +183,13 @@ CREATE TABLE IF NOT EXISTS booking.bookings (
   CONSTRAINT chk_party CHECK (party_size BETWEEN 1 AND 6)
 );
 
+CREATE TABLE IF NOT EXISTS booking.hidden_bookings (
+  booking_id BIGINT NOT NULL REFERENCES booking.bookings(id) ON DELETE CASCADE,
+  user_id BIGINT NOT NULL REFERENCES core.users(id) ON DELETE CASCADE,
+  hidden_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (booking_id, user_id)
+);
+
 -- Unique index: A user cannot hold two active bookings on the same trip
 CREATE UNIQUE INDEX IF NOT EXISTS uq_active_booking_per_user_trip
   ON booking.bookings(trip_id, user_id) WHERE status IN ('held', 'confirmed', 'waitlisted');
@@ -417,4 +424,3 @@ CREATE TABLE IF NOT EXISTS safety.safety_preferences (
   emergency_contact_email TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-

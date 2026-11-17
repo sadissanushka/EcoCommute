@@ -69,6 +69,35 @@ export interface Booking {
   destinationName: string;
 }
 
+export interface MyBooking {
+  id: number;
+  tripId: number;
+  partySize: number;
+  status: string;
+  createdAt: string;
+  departAt: string;
+  arriveAt: string;
+  routeName: string;
+  originName: string;
+  destinationName: string;
+  plateNo: string;
+  vehicleType: string;
+  seats: {
+    id: number;
+    label: string;
+  }[];
+}
+
+export interface BookingConfirmation {
+  id: number;
+  tripId: number;
+  userId: number;
+  partySize: number;
+  status: 'confirmed' | 'cancelled' | 'boarded';
+  assignedSeatIds: number[];
+  createdAt: string;
+}
+
 export interface WalletBalance {
   balanceLkr: number;
   balanceMinor: number;
