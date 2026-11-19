@@ -12,6 +12,8 @@ import { Register } from './pages/Register';
 import { RideMatching } from './pages/RideMatching';
 import { BookRide } from './pages/BookRide';
 import { MyBookings } from './pages/MyBookings';
+import { DriverDashboard } from './pages/DriverDashboard';
+import { StartRide } from './pages/StartRide';
 
 import { User, getAvatarInitials } from './types';
 import {
@@ -33,6 +35,8 @@ export const App: React.FC = () => {
     | 'wallet'
     | 'sos'
     | 'bookings'
+    | 'driver'
+    | 'start-ride'
     | 'login'
     | 'register'
   >(() => {
@@ -268,6 +272,17 @@ export const App: React.FC = () => {
             onBack={() => setViewMode('home')}
             onNavigateToFindShuttle={() => setViewMode('booking')}
           />
+        )}
+
+        {viewMode === 'driver' && (
+          <DriverDashboard
+            onPublishClick={() => setViewMode('rides')}
+            onStartRideClick={() => setViewMode('start-ride')}
+          />
+        )}
+
+        {viewMode === 'start-ride' && (
+          <StartRide onBack={() => setViewMode('driver')} />
         )}
       </div>
 
