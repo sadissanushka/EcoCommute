@@ -9,6 +9,29 @@ export interface User {
   verified?: boolean;
 }
 
+export function getFriendlyFirstName(fullName?: string): string {
+  if (!fullName) return 'Commuter';
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length > 1 && /^([A-Z]\.?)$/i.test(parts[0])) {
+    return parts[1];
+  }
+  const match = parts[0].match(/^[A-Z]\.([A-Za-z]+)$/i);
+  if (match) {
+    return match[1];
+  }
+  return parts[0];
+}
+
+export function getAvatarInitials(fullName?: string): string {
+  if (!fullName) return 'EC';
+  const clean = fullName.replace(/^[A-Z]\.\s*/i, '').replace(/^[A-Z]\./i, '');
+  const parts = clean.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return clean.slice(0, 2).toUpperCase();
+}
+
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;

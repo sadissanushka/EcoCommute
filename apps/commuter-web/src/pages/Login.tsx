@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { authApi } from '../api/client';
 import { User } from '../types';
 
@@ -15,11 +15,18 @@ export const Login: React.FC<LoginProps> = ({
   onSuccess,
   onGoToRegister,
 }) => {
-  const [email, setEmail] = useState(initialEmail || 'sarah.taylor@syscolabs.com');
-  const [password, setPassword] = useState(initialEmail ? '' : 'CorpPass2026!');
+  const [email, setEmail] = useState(initialEmail || '');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialEmail) {
+      setEmail(initialEmail);
+      setPassword('');
+    }
+  }, [initialEmail]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

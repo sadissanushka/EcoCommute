@@ -1,6 +1,6 @@
 import { User, AuthTokens, ShuttleTrip, BookingConfirmation, MyBooking, WalletBalance, Transaction, LiveVehicleTelemetry, WaitlistEntry, SeatHold } from '../types';
 
-const API_BASE = 'http://localhost:8080';
+const API_BASE = 'http://localhost:18080';
 
 function getAccessToken(): string | null {
   const storedToken = localStorage.getItem('access_token')?.trim();
@@ -196,7 +196,8 @@ export const authApi = {
       throw new Error('Authentication tokens were not returned by the server');
     }
 
-    setTokens(tokens, user);
+    // Do NOT call setTokens(tokens, user) here.
+    // Registration redirects to Login page so user explicitly signs in.
     return { user, tokens };
   },
   

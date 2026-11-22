@@ -1,5 +1,5 @@
 import React from 'react';
-import { User } from '../types';
+import { User, getFriendlyFirstName } from '../types';
 
 interface HomeProps {
   user: User | null;
@@ -16,7 +16,7 @@ export const Home: React.FC<HomeProps> = ({
   onNavigateToWallet,
   onNavigateToSos,
 }) => {
-  const firstName = user?.fullName ? user.fullName.split(' ')[0] : 'Commuter';
+  const firstName = getFriendlyFirstName(user?.fullName);
 
   return (
     <div className="flex flex-col w-full max-w-md mx-auto px-4 pb-24 gap-4 font-sans">

@@ -8,7 +8,7 @@ import { Wallet } from './pages/Wallet';
 
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
-import { User } from './types';
+import { User, getAvatarInitials } from './types';
 import { getCachedUser, clearSession } from './api/client';
 import { BookRide } from './pages/BookRide';
 import { MyBookings } from './pages/MyBookings';
@@ -16,24 +16,16 @@ export const App: React.FC = () => {
   // Navigation View State
   const [viewMode, setViewMode] = useState<
     'map' | 'home' | 'booking' | 'seats' | 'tracking' | 'wallet' | 'sos' | 'bookings' | 'login' | 'register'
-  >('home');
+  >(() => {
+    return getCachedUser() ? 'home' : 'login';
+  });
   const [selectedTripId, setSelectedTripId] = useState<number>(1);
   const [selectedPartySize, setSelectedPartySize] = useState<number>(1);
   const [registrationNotice, setRegistrationNotice] = useState<{ email: string; message: string } | null>(null);
 
   // Authenticated User State
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    return (
-      getCachedUser() || {
-        id: 1,
-        email: 'anushka.thisera@syscolabs.com',
-        fullName: 'Anushka Thisera',
-        companyId: 1,
-        companyName: 'Sysco LABS',
-        role: 'employee',
-        verified: true,
-      }
-    );
+    return getCachedUser();
   });
 
   const handleLogout = () => {
@@ -47,30 +39,10 @@ export const App: React.FC = () => {
     setViewMode('home');
   };
 
-  // If on Login view
-  if (viewMode === 'login') {
+  // If on Login view or unauthenticated
+  if (viewMode === 'login' || (!currentUser && viewMode !== 'register')) {
     return (
       <div className="relative w-full min-h-screen bg-surface">
-        <div className="absolute top-4 left-4 z-50">
-          <button
-            onClick={() => {
-              setCurrentUser({
-                id: 1,
-                email: 'anushka.thisera@syscolabs.com',
-                fullName: 'Anushka Thisera',
-                companyId: 1,
-                companyName: 'Sysco LABS',
-                role: 'employee',
-                verified: true,
-              });
-              setViewMode('home');
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-high/90 text-on-surface text-xs font-bold shadow hover:bg-surface-container-highest cursor-pointer transition-all"
-          >
-            <span className="material-symbols-outlined text-[16px]">arrow_back</span>
-            <span>Back to Hub (Demo Mode)</span>
-          </button>
-        </div>
         <Login
           initialEmail={registrationNotice?.email}
           registrationNotice={registrationNotice?.message}
@@ -181,13 +153,7 @@ export const App: React.FC = () => {
               className="w-8 h-8 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs uppercase select-none"
               title={currentUser?.fullName || 'User Profile'}
             >
-              {currentUser?.fullName
-                ? currentUser.fullName
-                    .split(' ')
-                    .map((n) => n[0])
-                    .join('')
-                    .slice(0, 2)
-                : 'AT'}
+              {getAvatarInitials(currentUser?.fullName)}
             </div>
           </div>
         </div>
