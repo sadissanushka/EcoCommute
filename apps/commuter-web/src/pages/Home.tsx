@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, getFriendlyFirstName } from '../types';
+import { User, getFriendlyFirstName, getAvatarInitials } from '../types';
 
 interface HomeProps {
   user: User | null;
@@ -168,18 +168,18 @@ export const Home: React.FC<HomeProps> = ({
       <section className="bg-surface-container-lowest p-3.5 rounded-xl border border-outline-variant/20 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs uppercase border border-primary/20">
-            {user?.fullName ? user.fullName.split(' ').map(n => n[0]).join('').slice(0, 2) : 'ST'}
+            {getAvatarInitials(user?.fullName)}
           </div>
           <div>
-            <div className="text-xs font-bold text-on-surface">{user?.fullName || 'Sarah Taylor'}</div>
+            <div className="text-xs font-bold text-on-surface">{user?.fullName || 'Authenticated Employee'}</div>
             <div className="text-[11px] text-on-surface-variant truncate max-w-[200px]">
-              {user?.email || 'sarah.taylor@syscolabs.com'}
+              {user?.email || ''}
             </div>
           </div>
         </div>
 
         <span className="text-[10px] font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full uppercase tracking-wider">
-          Verified
+          {user?.id ? `Verified #${user.id}` : 'Verified'}
         </span>
       </section>
     </div>

@@ -723,7 +723,7 @@ bookingRouter.get('/bookings/me', requireAuth, async (req: Request, res: Respons
   const userId = req.user!.userId;
   try {
     const bookingsResult = await pool.query(
-      `SELECT b.id, b.trip_id, b.party_size, b.status, b.created_at,
+      `SELECT b.id, b.trip_id, b.user_id, b.party_size, b.status, b.created_at,
               st.depart_at, st.arrive_at, sr.name AS route_name,
               sr.origin_name, sr.destination_name,
               v.plate_no, v.type AS vehicle_type,
@@ -743,7 +743,7 @@ bookingRouter.get('/bookings/me', requireAuth, async (req: Request, res: Respons
            FROM booking.hidden_bookings hb
            WHERE hb.booking_id = b.id AND hb.user_id = $1
          )
-       GROUP BY b.id, st.depart_at, st.arrive_at, sr.name, sr.origin_name, sr.destination_name, v.plate_no, v.type
+       GROUP BY b.id, b.user_id, st.depart_at, st.arrive_at, sr.name, sr.origin_name, sr.destination_name, v.plate_no, v.type
        ORDER BY b.created_at DESC`,
       [userId]
     );

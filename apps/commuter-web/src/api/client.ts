@@ -2,8 +2,9 @@ import { User, AuthTokens, ShuttleTrip, BookingConfirmation, MyBooking, WalletBa
 
 const API_BASE = 'http://localhost:18080';
 
-function getAccessToken(): string | null {
-  const storedToken = localStorage.getItem('access_token')?.trim();
+export function getAccessToken(): string | null {
+  // Check sessionStorage first so different tabs in the same browser maintain completely isolated employee sessions
+  const storedToken = (sessionStorage.getItem('access_token') || localStorage.getItem('access_token'))?.trim();
   if (!storedToken) return null;
 
   // Older sessions may have stored the complete Authorization value instead
@@ -13,6 +14,14 @@ function getAccessToken(): string | null {
 }
 
 export function setTokens(tokens: AuthTokens, user?: User) {
+  // 1. Primary tab-isolated storage
+  sessionStorage.setItem('access_token', tokens.accessToken);
+  sessionStorage.setItem('refresh_token', tokens.refreshToken);
+  if (user) {
+    sessionStorage.setItem('user_profile', JSON.stringify(user));
+  }
+
+  // 2. Also save to localStorage for persistence across single-tab reloads
   localStorage.setItem('access_token', tokens.accessToken);
   localStorage.setItem('refresh_token', tokens.refreshToken);
   if (user) {
@@ -21,13 +30,17 @@ export function setTokens(tokens: AuthTokens, user?: User) {
 }
 
 export function clearSession() {
+  sessionStorage.removeItem('access_token');
+  sessionStorage.removeItem('refresh_token');
+  sessionStorage.removeItem('user_profile');
+
   localStorage.removeItem('access_token');
   localStorage.removeItem('refresh_token');
   localStorage.removeItem('user_profile');
 }
 
 export function getCachedUser(): User | null {
-  const raw = localStorage.getItem('user_profile');
+  const raw = sessionStorage.getItem('user_profile') || localStorage.getItem('user_profile');
   if (!raw) return null;
   try {
     return JSON.parse(raw);
@@ -207,14 +220,17 @@ export const authApi = {
     try {
       const res = await request<any>('/auth/me');
       const u = res.user || res;
+      if (!u || !u.id) return cached;
       const user: User = {
-        id: u.id,
+        id: Number(u.id),
         email: u.email,
         fullName: u.fullName || u.full_name,
-        companyId: u.companyId || u.company_id,
+        companyId: Number(u.companyId ?? u.company_id ?? 1),
+        companyName: u.companyName || u.company_name,
         role: u.role,
-        verified: true,
+        verified: u.corporateVerified ?? u.corporate_verified ?? u.verified ?? true,
       };
+      sessionStorage.setItem('user_profile', JSON.stringify(user));
       localStorage.setItem('user_profile', JSON.stringify(user));
       return user;
     } catch {
@@ -566,6 +582,7 @@ async getTripDetails(tripId: number): Promise<ShuttleTrip> {
   return res.bookings.map((booking) => ({
     id: Number(booking.id),
     tripId: Number(booking.trip_id),
+    userId: booking.user_id ? Number(booking.user_id) : undefined,
     partySize: Number(booking.party_size),
     status: booking.status,
     createdAt: booking.created_at,

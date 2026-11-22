@@ -95,6 +95,7 @@ export interface Booking {
 export interface MyBooking {
   id: number;
   tripId: number;
+  userId?: number;
   partySize: number;
   status: string;
   createdAt: string;

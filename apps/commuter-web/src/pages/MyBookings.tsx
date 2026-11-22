@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { bookingApi } from '../api/client';
-import { MyBooking, WaitlistEntry } from '../types';
+import { MyBooking, WaitlistEntry, User, getAvatarInitials } from '../types';
 
 interface MyBookingsProps {
+  user?: User | null;
   onBack: () => void;
   onNavigateToFindShuttle?: () => void;
 }
 
-export const MyBookings: React.FC<MyBookingsProps> = ({ onBack, onNavigateToFindShuttle }) => {
+export const MyBookings: React.FC<MyBookingsProps> = ({ user, onBack, onNavigateToFindShuttle }) => {
   const [bookings, setBookings] = useState<MyBooking[]>([]);
   const [waitlists, setWaitlists] = useState<WaitlistEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,6 +150,30 @@ export const MyBookings: React.FC<MyBookingsProps> = ({ onBack, onNavigateToFind
         </div>
       </div>
 
+      {/* Account Ownership Banner */}
+      {user && (
+        <div className="mb-4 bg-surface-container-low border border-primary/20 rounded-2xl p-3.5 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center font-bold text-sm uppercase shadow-sm">
+              {getAvatarInitials(user.fullName)}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-on-surface">{user.fullName || 'Authenticated Employee'}</span>
+                <span className="text-[10px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full">
+                  Employee #{user.id}
+                </span>
+              </div>
+              <span className="text-xs text-outline">{user.email}</span>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="text-xs font-bold text-primary">{bookings.length}</span>
+            <span className="block text-[10px] text-outline uppercase font-semibold">Reservations</span>
+          </div>
+        </div>
+      )}
+
       {/* Success Notice */}
       {notice && (
         <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs flex items-center gap-2">
@@ -279,9 +304,16 @@ export const MyBookings: React.FC<MyBookingsProps> = ({ onBack, onNavigateToFind
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <span className="text-[10px] font-mono font-bold text-primary">
-                          #EC-{booking.id}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono font-bold text-primary">
+                            #EC-{booking.id}
+                          </span>
+                          {booking.userId && (
+                            <span className="text-[9px] font-semibold text-outline bg-surface-container-high px-1.5 py-0.5 rounded">
+                              Owner: User #{booking.userId}
+                            </span>
+                          )}
+                        </div>
                         <h3 className="font-bold text-sm text-on-surface mt-0.5">
                           {booking.routeName || `Trip #${booking.tripId}`}
                         </h3>

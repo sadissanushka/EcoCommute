@@ -9,7 +9,7 @@ import { Wallet } from './pages/Wallet';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { User, getAvatarInitials } from './types';
-import { getCachedUser, clearSession } from './api/client';
+import { getCachedUser, clearSession, authApi, getAccessToken } from './api/client';
 import { BookRide } from './pages/BookRide';
 import { MyBookings } from './pages/MyBookings';
 export const App: React.FC = () => {
@@ -27,6 +27,23 @@ export const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     return getCachedUser();
   });
+
+  // Verify and sync authenticated employee session on tab mount
+  useEffect(() => {
+    const token = getAccessToken();
+    if (token) {
+      authApi
+        .getMe()
+        .then((verifiedUser) => {
+          if (verifiedUser) {
+            setCurrentUser(verifiedUser);
+          }
+        })
+        .catch(() => {
+          handleLogout();
+        });
+    }
+  }, []);
 
   const handleLogout = () => {
     clearSession();
@@ -207,6 +224,7 @@ export const App: React.FC = () => {
 
         {viewMode === 'bookings' && (
           <MyBookings
+            user={currentUser}
             onBack={() => setViewMode('home')}
             onNavigateToFindShuttle={() => setViewMode('booking')}
           />
