@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { bookingApi } from '../api/client';
-import { ShuttleTrip } from '../types';
+import { ShuttleTrip, WaitlistEntry } from '../types';
 
 interface BookRideProps {
-  onSelectTrip: (tripId: number) => void;
+  onSelectTrip: (tripId: number, partySize: number) => void;
   onNavigateHome: () => void;
+  onNavigateToBookings?: () => void;
 }
 
-
-export const BookRide: React.FC<BookRideProps> = ({ onSelectTrip, onNavigateHome }) => {
+export const BookRide: React.FC<BookRideProps> = ({
+  onSelectTrip,
+  onNavigateHome,
+  onNavigateToBookings,
+}) => {
   const [trips, setTrips] = useState<ShuttleTrip[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -16,8 +20,13 @@ export const BookRide: React.FC<BookRideProps> = ({ onSelectTrip, onNavigateHome
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
   const [travelDate, setTravelDate] = useState('');
+  const [partySize, setPartySize] = useState<number>(1);
 
   const [selectedTripIndex, setSelectedTripIndex] = useState(0);
+
+  // Waitlist state
+  const [joiningWaitlistTripId, setJoiningWaitlistTripId] = useState<number | null>(null);
+  const [waitlistSuccess, setWaitlistSuccess] = useState<WaitlistEntry | null>(null);
 
   // Initial load: retrieve real scheduled trips from the backend.
   useEffect(() => {
@@ -57,7 +66,7 @@ export const BookRide: React.FC<BookRideProps> = ({ onSelectTrip, onNavigateHome
     };
   }, []);
 
-  // Search using the employee's entered locations and travel date.
+  // Search using the employee's entered locations, travel date, and party size.
   const handleSearch = async () => {
     if (!pickup.trim() || !destination.trim()) {
       setSearchError('Please enter both pickup and destination locations.');
@@ -72,6 +81,7 @@ export const BookRide: React.FC<BookRideProps> = ({ onSelectTrip, onNavigateHome
     try {
       setLoading(true);
       setSearchError(null);
+      setWaitlistSuccess(null);
       setTrips([]);
       setSelectedTripIndex(0);
 
@@ -79,7 +89,7 @@ export const BookRide: React.FC<BookRideProps> = ({ onSelectTrip, onNavigateHome
         origin: pickup.trim(),
         destination: destination.trim(),
         date: travelDate || undefined,
-        seatsNeeded: 1,
+        seatsNeeded: partySize,
       });
 
       setTrips(results);
@@ -95,7 +105,18 @@ export const BookRide: React.FC<BookRideProps> = ({ onSelectTrip, onNavigateHome
     }
   };
 
-  const activeTrip = trips[selectedTripIndex] || null;
+  const handleJoinWaitlist = async (tripId: number) => {
+    try {
+      setJoiningWaitlistTripId(tripId);
+      setSearchError(null);
+      const entry = await bookingApi.joinWaitlist(tripId, partySize);
+      setWaitlistSuccess(entry);
+    } catch (err: any) {
+      setSearchError(err.message || 'Failed to join waitlist.');
+    } finally {
+      setJoiningWaitlistTripId(null);
+    }
+  };
 
   return (
     <div className="relative w-full h-[calc(100vh-64px)] overflow-hidden font-sans">
@@ -128,10 +149,9 @@ export const BookRide: React.FC<BookRideProps> = ({ onSelectTrip, onNavigateHome
           <circle cx="320" cy="680" r="7" fill="#ba1a1a" />
           <circle cx="320" cy="680" r="3" fill="#ffffff" />
         </svg>
-
       </div>
 
-      {/* Top Section: Minimal Unified Floating Search Pill & Quick Chips */}
+      {/* Top Section: Search Panel with Party Size */}
       <div className="relative z-20 px-4 pt-3 flex flex-col gap-2 max-w-md mx-auto">
         <div className="bg-surface/95 backdrop-blur-xl rounded-2xl shadow-xl p-3 flex flex-col gap-2 border border-white/60">
           <div className="bg-surface-container-low rounded-xl p-2 flex flex-col gap-1 border border-outline-variant/30">
@@ -176,34 +196,54 @@ export const BookRide: React.FC<BookRideProps> = ({ onSelectTrip, onNavigateHome
             </div>
           </div>
 
-
-
+          {/* Travel Date & Party Size Row */}
+          <div className="grid grid-cols-2 gap-2 pt-1">
             {/* Travel Date */}
-            <div className="flex items-center gap-2 px-2 pt-2">
-              <span className="material-symbols-outlined text-primary text-[18px]">
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-container-lowest rounded-xl border border-outline-variant/30">
+              <span className="material-symbols-outlined text-primary text-[16px]">
                 calendar_month
               </span>
-
               <input
                 type="date"
                 value={travelDate}
                 min={new Date().toISOString().split('T')[0]}
                 onChange={(e) => setTravelDate(e.target.value)}
-                className="flex-1 bg-transparent py-2 text-xs font-semibold text-on-surface outline-none"
+                className="w-full bg-transparent text-xs font-semibold text-on-surface outline-none"
               />
             </div>
 
-            {/* Search Button */}
-            <button
-              type="button"
-              onClick={handleSearch}
-              disabled={loading}
-              className="w-full bg-primary text-on-primary rounded-xl py-3 text-sm font-bold shadow-md hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              {loading ? 'SEARCHING...' : 'SEARCH SHUTTLES'}
-            </button>
+            {/* Party Size Selector (1-6) */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-container-lowest rounded-xl border border-outline-variant/30">
+              <span className="material-symbols-outlined text-primary text-[16px]">
+                group
+              </span>
+              <div className="flex items-center justify-between w-full">
+                <span className="text-xs font-bold text-on-surface">Riders:</span>
+                <select
+                  value={partySize}
+                  onChange={(e) => setPartySize(parseInt(e.target.value, 10))}
+                  aria-label="Number of riders"
+                  className="bg-transparent text-xs font-bold text-primary outline-none cursor-pointer"
+                >
+                  {[1, 2, 3, 4, 5, 6].map((num) => (
+                    <option key={num} value={num}>
+                      {num} {num === 1 ? 'person' : 'people'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
 
-
+          {/* Search Button */}
+          <button
+            type="button"
+            onClick={handleSearch}
+            disabled={loading}
+            className="w-full bg-primary text-on-primary rounded-xl py-2.5 text-xs font-bold shadow-md hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+          >
+            {loading ? 'SEARCHING...' : `SEARCH SHUTTLES (FOR ${partySize})`}
+          </button>
 
           {/* Quick Chips */}
           <div className="flex gap-2 overflow-x-auto pt-0.5 no-scrollbar">
@@ -232,116 +272,132 @@ export const BookRide: React.FC<BookRideProps> = ({ onSelectTrip, onNavigateHome
         </div>
       </div>
 
-      {/* Lower Section: Real Backend Search Results */}
+      {/* Lower Section: Search Results */}
       <div className="absolute bottom-20 left-4 right-4 z-20 max-w-md mx-auto">
         <div className="bg-surface/95 backdrop-blur-xl rounded-2xl shadow-2xl p-4 flex flex-col gap-3 border border-white/60 max-h-[45vh] overflow-y-auto">
-
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-on-surface">
-              Available Shuttles
-            </h2>
-
-            <span className="text-xs text-on-surface-variant">
-              {trips.length} found
-            </span>
+            <h2 className="text-base font-bold text-on-surface">Available Shuttles</h2>
+            <span className="text-xs text-on-surface-variant">{trips.length} found</span>
           </div>
+
+          {/* Waitlist Success Banner */}
+          {waitlistSuccess && (
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 flex flex-col gap-1.5">
+              <div className="flex items-center gap-1.5 font-bold">
+                <span className="material-symbols-outlined text-amber-600 text-[18px]">hourglass_top</span>
+                <span>Waitlist Enrollment Confirmed!</span>
+              </div>
+              <p>
+                You are <strong>#{waitlistSuccess.position}</strong> in line for a party of {waitlistSuccess.partySize}. If a reservation is cancelled, you will be automatically promoted.
+              </p>
+              {onNavigateToBookings && (
+                <button
+                  type="button"
+                  onClick={onNavigateToBookings}
+                  className="mt-1 text-primary font-bold underline text-left cursor-pointer"
+                >
+                  View in My Bookings →
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Loading */}
           {loading && (
             <div className="py-6 text-center">
               <div className="animate-spin w-7 h-7 border-4 border-primary border-t-transparent rounded-full mx-auto mb-2"></div>
-              <p className="text-sm text-on-surface-variant">
-                Finding available shuttles...
-              </p>
+              <p className="text-sm text-on-surface-variant">Finding available shuttles...</p>
             </div>
           )}
 
           {/* Error */}
           {!loading && searchError && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-3">
-              <p className="text-sm font-semibold text-red-700">
-                Search failed
-              </p>
-              <p className="text-xs text-red-600 mt-1">
-                {searchError}
-              </p>
+              <p className="text-sm font-semibold text-red-700">Notice</p>
+              <p className="text-xs text-red-600 mt-1">{searchError}</p>
             </div>
           )}
 
           {/* No Results */}
           {!loading && !searchError && trips.length === 0 && (
             <div className="py-6 text-center">
-              <span className="material-symbols-outlined text-3xl text-on-surface-variant">
-                directions_bus
-              </span>
-
-              <p className="text-sm font-semibold text-on-surface mt-2">
-                No shuttles found
-              </p>
-
-              <p className="text-xs text-on-surface-variant mt-1">
-                Try different pickup or destination locations.
-              </p>
+              <span className="material-symbols-outlined text-3xl text-on-surface-variant">directions_bus</span>
+              <p className="text-sm font-semibold text-on-surface mt-2">No shuttles found</p>
+              <p className="text-xs text-on-surface-variant mt-1">Try adjusting your travel date or party size.</p>
             </div>
           )}
 
-          {/* Real Search Results */}
-          {!loading && !searchError && trips.map((trip, index) => (
-            <div
-              key={trip.id}
-              className={`rounded-xl border p-3 flex flex-col gap-2 ${
-                selectedTripIndex === index
-                  ? 'border-primary bg-primary/5'
-                  : 'border-outline-variant/50 bg-surface-container-lowest'
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => setSelectedTripIndex(index)}
-                className="text-left w-full"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-sm text-on-surface">
-                      {trip.routeName || `Shuttle Trip #${trip.id}`}
-                    </h3>
+          {/* Trip Cards */}
+          {!loading && !searchError && trips.map((trip, index) => {
+            const hasSufficientSeats = trip.availableSeats >= partySize;
 
-                    <p className="text-xs text-on-surface-variant mt-1">
-                      {trip.originName} → {trip.destinationName}
-                    </p>
+            return (
+              <div
+                key={trip.id}
+                className={`rounded-xl border p-3 flex flex-col gap-2 ${
+                  selectedTripIndex === index
+                    ? 'border-primary bg-primary/5'
+                    : 'border-outline-variant/50 bg-surface-container-lowest'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setSelectedTripIndex(index)}
+                  className="text-left w-full cursor-pointer"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-sm text-on-surface">
+                        {trip.routeName || `Shuttle Trip #${trip.id}`}
+                      </h3>
+                      <p className="text-xs text-on-surface-variant mt-0.5">
+                        {trip.originName} → {trip.destinationName}
+                      </p>
+                    </div>
+
+                    <span
+                      className={`text-xs font-bold whitespace-nowrap px-2 py-0.5 rounded-full ${
+                        hasSufficientSeats
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {trip.availableSeats} seats left
+                    </span>
                   </div>
 
-                  <span className="text-xs font-bold text-primary whitespace-nowrap">
-                    {trip.availableSeats} seats free
-                  </span>
-                </div>
-
-                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-on-surface-variant">
-                  <span>
-                    <span className="material-symbols-outlined text-[14px] align-middle mr-1">
-                      schedule
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-on-surface-variant">
+                    <span>
+                      <span className="material-symbols-outlined text-[14px] align-middle mr-1">schedule</span>
+                      {trip.departAt ? new Date(trip.departAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Time unavailable'}
                     </span>
-                    {trip.departAt
-                      ? new Date(trip.departAt).toLocaleString()
-                      : 'Departure time unavailable'}
-                  </span>
+                    <span>{trip.vehicle?.type || 'Shuttle'}</span>
+                  </div>
+                </button>
 
-                  <span>
-                    {trip.vehicle?.type || 'Vehicle information unavailable'}
-                  </span>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onSelectTrip(trip.id)}
-                disabled={trip.availableSeats < 1}
-                className="w-full bg-primary text-on-primary rounded-full px-4 py-2.5 text-xs font-bold shadow-md hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                {trip.availableSeats > 0 ? 'BOOK THIS SHUTTLE' : 'FULL'}
-              </button>
-            </div>
-          ))}
+                {hasSufficientSeats ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectTrip(trip.id, partySize)}
+                    className="w-full bg-primary text-on-primary rounded-xl px-4 py-2 text-xs font-bold shadow-md hover:brightness-110 active:scale-98 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">event_seat</span>
+                    <span>SELECT SEATS ({partySize} {partySize === 1 ? 'PERSON' : 'PEOPLE'})</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleJoinWaitlist(trip.id)}
+                    disabled={joiningWaitlistTripId === trip.id}
+                    className="w-full bg-amber-600 text-white rounded-xl px-4 py-2 text-xs font-bold shadow-md hover:bg-amber-700 active:scale-98 transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">hourglass_top</span>
+                    <span>{joiningWaitlistTripId === trip.id ? 'JOINING WAITLIST...' : `JOIN WAITLIST (PARTY OF ${partySize})`}</span>
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

@@ -214,20 +214,58 @@ CREATE TABLE IF NOT EXISTS booking.waitlist_entries (
   party_size INT NOT NULL DEFAULT 1,
   status TEXT NOT NULL DEFAULT 'waiting'
     CHECK (status IN ('waiting', 'promoted', 'expired', 'cancelled')),
-  created_at TIMESTAMPTZ DEFAULT now()
+  booking_id BIGINT REFERENCES booking.bookings(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  promoted_at TIMESTAMPTZ
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uq_active_waitlist_per_user_trip
+  ON booking.waitlist_entries(trip_id, user_id)
+  WHERE status = 'waiting';
 CREATE INDEX IF NOT EXISTS idx_booking_waitlist_trip_created
   ON booking.waitlist_entries(trip_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_booking_waitlist_trip_waiting
+  ON booking.waitlist_entries(trip_id, created_at)
+  WHERE status = 'waiting';
+
+CREATE TABLE IF NOT EXISTS booking.holds (
+  id BIGSERIAL PRIMARY KEY,
+  trip_id BIGINT NOT NULL REFERENCES booking.shuttle_trips(id) ON DELETE CASCADE,
+  user_id BIGINT NOT NULL REFERENCES core.users(id) ON DELETE CASCADE,
+  party_size INT NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'held'
+    CHECK (status IN ('held', 'confirmed', 'expired', 'released')),
+  expires_at TIMESTAMPTZ NOT NULL,
+  confirmed_at TIMESTAMPTZ,
+  booking_id BIGINT REFERENCES booking.bookings(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_booking_holds_trip_status
+  ON booking.holds(trip_id, status);
+CREATE INDEX IF NOT EXISTS idx_booking_holds_expires
+  ON booking.holds(expires_at)
+  WHERE status = 'held';
+CREATE INDEX IF NOT EXISTS idx_booking_holds_user
+  ON booking.holds(user_id, status);
 
 CREATE TABLE IF NOT EXISTS booking.seat_holds (
   id BIGSERIAL PRIMARY KEY,
+  hold_id BIGINT REFERENCES booking.holds(id) ON DELETE CASCADE,
   trip_id BIGINT NOT NULL REFERENCES booking.shuttle_trips(id) ON DELETE CASCADE,
   seat_id BIGINT NOT NULL REFERENCES booking.seats(id) ON DELETE CASCADE,
   user_id BIGINT NOT NULL REFERENCES core.users(id) ON DELETE CASCADE,
   expires_at TIMESTAMPTZ NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now()
+  status TEXT NOT NULL DEFAULT 'held'
+    CHECK (status IN ('held', 'confirmed', 'expired', 'released')),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_booking_seat_holds_expires ON booking.seat_holds(expires_at);
+CREATE INDEX IF NOT EXISTS idx_booking_seat_holds_hold ON booking.seat_holds(hold_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_active_seat_hold
+  ON booking.seat_holds(trip_id, seat_id)
+  WHERE status = 'held';
 
 CREATE TABLE IF NOT EXISTS booking.booking_audit (
   id BIGSERIAL PRIMARY KEY,

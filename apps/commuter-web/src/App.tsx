@@ -1,40 +1,74 @@
+
 import React, { useState, useEffect } from 'react';
+
 import { MapStudio } from './pages/MapStudio';
 import { Home } from './pages/Home';
 import { SeatSelection } from './pages/SeatSelection';
 import { LiveTracking } from './pages/LiveTracking';
 import { EmergencySos } from './pages/EmergencySos';
 import { Wallet } from './pages/Wallet';
-
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { RideMatching } from './pages/RideMatching';
-import { User } from './types';
-import { getCachedUser, clearSession } from './api/client';
 import { BookRide } from './pages/BookRide';
 import { MyBookings } from './pages/MyBookings';
+
+import { User, getAvatarInitials } from './types';
+import {
+  getCachedUser,
+  clearSession,
+  authApi,
+  getAccessToken,
+} from './api/client';
+
 export const App: React.FC = () => {
   // Navigation View State
   const [viewMode, setViewMode] = useState<
-    'map' | 'home' | 'rides' | 'booking' | 'seats' | 'tracking' | 'wallet' | 'sos' | 'bookings' | 'login' | 'register'
-  >('home');
+    | 'map'
+    | 'home'
+    | 'rides'
+    | 'booking'
+    | 'seats'
+    | 'tracking'
+    | 'wallet'
+    | 'sos'
+    | 'bookings'
+    | 'login'
+    | 'register'
+  >(() => {
+    return getCachedUser() ? 'home' : 'login';
+  });
+
   const [selectedTripId, setSelectedTripId] = useState<number>(1);
-  const [registrationNotice, setRegistrationNotice] = useState<{ email: string; message: string } | null>(null);
+  const [selectedPartySize, setSelectedPartySize] = useState<number>(1);
+
+  const [registrationNotice, setRegistrationNotice] = useState<{
+    email: string;
+    message: string;
+  } | null>(null);
 
   // Authenticated User State
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    return (
-      getCachedUser() || {
-        id: 1,
-        email: 'anushka.thisera@syscolabs.com',
-        fullName: 'Anushka Thisera',
-        companyId: 1,
-        companyName: 'Sysco LABS',
-        role: 'employee',
-        verified: true,
-      }
-    );
+    return getCachedUser();
   });
+
+  // Verify and sync authenticated employee session on tab mount
+  useEffect(() => {
+    const token = getAccessToken();
+
+    if (token) {
+      authApi
+        .getMe()
+        .then((verifiedUser) => {
+          if (verifiedUser) {
+            setCurrentUser(verifiedUser);
+          }
+        })
+        .catch(() => {
+          handleLogout();
+        });
+    }
+  }, []);
 
   const handleLogout = () => {
     clearSession();
@@ -47,30 +81,10 @@ export const App: React.FC = () => {
     setViewMode('home');
   };
 
-  // If on Login view
-  if (viewMode === 'login') {
+  // If on Login view or unauthenticated
+  if (viewMode === 'login' || (!currentUser && viewMode !== 'register')) {
     return (
       <div className="relative w-full min-h-screen bg-surface">
-        <div className="absolute top-4 left-4 z-50">
-          <button
-            onClick={() => {
-              setCurrentUser({
-                id: 1,
-                email: 'anushka.thisera@syscolabs.com',
-                fullName: 'Anushka Thisera',
-                companyId: 1,
-                companyName: 'Sysco LABS',
-                role: 'employee',
-                verified: true,
-              });
-              setViewMode('home');
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-high/90 text-on-surface text-xs font-bold shadow hover:bg-surface-container-highest cursor-pointer transition-all"
-          >
-            <span className="material-symbols-outlined text-[16px]">arrow_back</span>
-            <span>Back to Hub (Demo Mode)</span>
-          </button>
-        </div>
         <Login
           initialEmail={registrationNotice?.email}
           registrationNotice={registrationNotice?.message}
@@ -115,7 +129,9 @@ export const App: React.FC = () => {
             onClick={() => setViewMode('home')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-lowest/90 backdrop-blur-md text-on-surface shadow-lg border border-outline-variant/30 text-xs font-bold hover:bg-surface-container active:scale-95 transition-all cursor-pointer"
           >
-            <span className="material-symbols-outlined text-[16px] text-primary">dashboard</span>
+            <span className="material-symbols-outlined text-[16px] text-primary">
+              dashboard
+            </span>
             <span>Commuter Hub</span>
           </button>
 
@@ -124,7 +140,9 @@ export const App: React.FC = () => {
             title="Log Out"
             className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-surface-container-lowest/90 backdrop-blur-md text-error shadow-lg border border-error/20 text-xs font-bold hover:bg-error/10 active:scale-95 transition-all cursor-pointer"
           >
-            <span className="material-symbols-outlined text-[16px]">logout</span>
+            <span className="material-symbols-outlined text-[16px]">
+              logout
+            </span>
             <span>Log Out</span>
           </button>
         </div>
@@ -145,36 +163,41 @@ export const App: React.FC = () => {
               onClick={() => setViewMode('map')}
               className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary text-on-primary text-xs font-bold shadow-sm hover:bg-primary-container cursor-pointer transition-all"
             >
-              <span className="material-symbols-outlined text-[18px]">map</span>
+              <span className="material-symbols-outlined text-[18px]">
+                map
+              </span>
               <span>Map Studio</span>
             </button>
+
             <span className="font-bold text-base text-on-surface">
               {viewMode === 'booking'
                 ? 'Find Your Shuttle'
                 : viewMode === 'seats'
-                ? 'Seat Selection'
-                : viewMode === 'rides'
-                ? 'Ride Matching'
-                : viewMode === 'tracking'
-                ? 'Live Telematics'  
-                : viewMode === 'sos'
-                ? 'Emergency SOS'
-                : viewMode === 'wallet'
-                ? 'Wallet & ESG'
-                : viewMode === 'bookings'
-                ? 'My Bookings'
-                : 'Commuter Hub'}
+                  ? 'Seat Selection'
+                  : viewMode === 'rides'
+                    ? 'Ride Matching'
+                    : viewMode === 'tracking'
+                      ? 'Live Telematics'
+                      : viewMode === 'sos'
+                        ? 'Emergency SOS'
+                        : viewMode === 'wallet'
+                          ? 'Wallet & ESG'
+                          : viewMode === 'bookings'
+                            ? 'My Bookings'
+                            : 'Commuter Hub'}
             </span>
           </div>
 
-          {/* Right Header: Profile Avatar and Single Logout Button */}
+          {/* Right Header: Profile Avatar and Logout Button */}
           <div className="flex items-center gap-2">
             <button
               onClick={handleLogout}
               title="Log out of account"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-error hover:bg-error/10 hover:border-error/30 border border-error/20 text-xs font-bold transition-all cursor-pointer active:scale-95 shadow-sm"
             >
-              <span className="material-symbols-outlined text-[17px]">logout</span>
+              <span className="material-symbols-outlined text-[17px]">
+                logout
+              </span>
               <span>Log Out</span>
             </button>
 
@@ -183,13 +206,7 @@ export const App: React.FC = () => {
               className="w-8 h-8 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs uppercase select-none"
               title={currentUser?.fullName || 'User Profile'}
             >
-              {currentUser?.fullName
-                ? currentUser.fullName
-                    .split(' ')
-                    .map((n) => n[0])
-                    .join('')
-                    .slice(0, 2)
-                : 'AT'}
+              {getAvatarInitials(currentUser?.fullName)}
             </div>
           </div>
         </div>
@@ -209,19 +226,23 @@ export const App: React.FC = () => {
 
         {viewMode === 'booking' && (
           <BookRide
-            onSelectTrip={(tripId) => {
+            onSelectTrip={(tripId, partySize) => {
               setSelectedTripId(tripId);
+              setSelectedPartySize(partySize || 1);
               setViewMode('seats');
             }}
             onNavigateHome={() => setViewMode('home')}
+            onNavigateToBookings={() => setViewMode('bookings')}
           />
         )}
 
         {viewMode === 'seats' && (
           <SeatSelection
             tripId={selectedTripId}
-            onBookingSuccess={() => setViewMode('home')}
+            partySize={selectedPartySize}
+            onBookingSuccess={() => setViewMode('bookings')}
             onBack={() => setViewMode('booking')}
+            onNavigateToBookings={() => setViewMode('bookings')}
           />
         )}
 
@@ -233,7 +254,9 @@ export const App: React.FC = () => {
           />
         )}
 
-        {viewMode === 'sos' && <EmergencySos onBack={() => setViewMode('map')} />}
+        {viewMode === 'sos' && (
+          <EmergencySos onBack={() => setViewMode('map')} />
+        )}
 
         {viewMode === 'rides' && <RideMatching user={currentUser} />}
 
@@ -241,7 +264,9 @@ export const App: React.FC = () => {
 
         {viewMode === 'bookings' && (
           <MyBookings
+            user={currentUser}
             onBack={() => setViewMode('home')}
+            onNavigateToFindShuttle={() => setViewMode('booking')}
           />
         )}
       </div>
@@ -253,37 +278,44 @@ export const App: React.FC = () => {
             onClick={() => setViewMode('map')}
             className="flex-1 flex flex-col items-center justify-center py-1 transition-all text-on-surface-variant hover:text-primary"
           >
-            <span className="material-symbols-outlined text-[22px]">explore</span>
+            <span className="material-symbols-outlined text-[22px]">
+              explore
+            </span>
             <span className="text-[11px] mt-0.5">Map</span>
           </button>
 
           <button
             onClick={() => setViewMode('rides')}
-            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all ${
-              viewMode === 'rides' ? 'text-primary font-bold' : 'text-on-surface-variant'
-            }`}
+            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all ${viewMode === 'rides'
+              ? 'text-primary font-bold'
+              : 'text-on-surface-variant'
+              }`}
           >
-            <span className="material-symbols-outlined text-[22px]">commute</span>
+            <span className="material-symbols-outlined text-[22px]">
+              commute
+            </span>
             <span className="text-[11px] mt-0.5">Matches</span>
           </button>
 
           <button
             onClick={() => setViewMode('home')}
-            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all ${
-              viewMode === 'home' ? 'text-primary font-bold' : 'text-on-surface-variant'
-            }`}
+            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all ${viewMode === 'home'
+              ? 'text-primary font-bold'
+              : 'text-on-surface-variant'
+              }`}
           >
-            <span className="material-symbols-outlined text-[22px]">grid_view</span>
+            <span className="material-symbols-outlined text-[22px]">
+              grid_view
+            </span>
             <span className="text-[11px] mt-0.5">Hub</span>
           </button>
 
           <button
             onClick={() => setViewMode('bookings')}
-            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all ${
-              viewMode === 'bookings'
-                ? 'text-primary font-bold'
-                : 'text-on-surface-variant'
-            }`}
+            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all ${viewMode === 'bookings'
+              ? 'text-primary font-bold'
+              : 'text-on-surface-variant'
+              }`}
           >
             <span className="material-symbols-outlined text-[22px]">
               confirmation_number
@@ -291,24 +323,29 @@ export const App: React.FC = () => {
             <span className="text-[11px] mt-0.5">Bookings</span>
           </button>
 
-
           <button
             onClick={() => setViewMode('tracking')}
-            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all ${
-              viewMode === 'tracking' ? 'text-primary font-bold' : 'text-on-surface-variant'
-            }`}
+            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all ${viewMode === 'tracking'
+              ? 'text-primary font-bold'
+              : 'text-on-surface-variant'
+              }`}
           >
-            <span className="material-symbols-outlined text-[22px]">radar</span>
+            <span className="material-symbols-outlined text-[22px]">
+              radar
+            </span>
             <span className="text-[11px] mt-0.5">Tracking</span>
           </button>
 
           <button
             onClick={() => setViewMode('wallet')}
-            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all ${
-              viewMode === 'wallet' ? 'text-primary font-bold' : 'text-on-surface-variant'
-            }`}
+            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all ${viewMode === 'wallet'
+              ? 'text-primary font-bold'
+              : 'text-on-surface-variant'
+              }`}
           >
-            <span className="material-symbols-outlined text-[22px]">account_balance_wallet</span>
+            <span className="material-symbols-outlined text-[22px]">
+              account_balance_wallet
+            </span>
             <span className="text-[11px] mt-0.5">Wallet</span>
           </button>
 
@@ -317,9 +354,13 @@ export const App: React.FC = () => {
             className="flex flex-col items-center justify-center -mt-4 p-2 rounded-full active:scale-95 transition-transform"
           >
             <div className="w-12 h-12 rounded-full bg-error text-on-error flex items-center justify-center shadow-lg shadow-error/30">
-              <span className="material-symbols-outlined text-[24px]">emergency</span>
+              <span className="material-symbols-outlined text-[24px]">
+                emergency
+              </span>
             </div>
-            <span className="text-[10px] font-bold text-error mt-0.5 uppercase">SOS</span>
+            <span className="text-[10px] font-bold text-error mt-0.5 uppercase">
+              SOS
+            </span>
           </button>
         </div>
       </nav>

@@ -109,22 +109,32 @@ describe('Module 2 - Booking Service Tests (Interim Step 1.5)', () => {
       const futureCutoff = new Date(Date.now() + 3600000).toISOString();
 
       const mockClient = {
-        query: jest.fn()
-          .mockResolvedValueOnce({ rows: [] }) // BEGIN
-          .mockResolvedValueOnce({
-            rows: [{ id: 1, vehicle_id: 1, status: 'scheduled', booking_cutoff_at: futureCutoff }],
-          }) // SELECT trip
-          .mockResolvedValueOnce({ rows: [] }) // active booking check (none)
-          .mockResolvedValueOnce({
-            rows: [{ id: 101 }, { id: 102 }],
-          }) // available seats (exactly 2 seats available)
-          .mockResolvedValueOnce({
-            rows: [{ id: 50, trip_id: 1, user_id: 3, party_size: 2, status: 'confirmed', created_at: new Date().toISOString() }],
-          }) // insert booking
-          .mockResolvedValueOnce({ rows: [] }) // insert seat 101
-          .mockResolvedValueOnce({ rows: [] }) // insert seat 102
-          .mockResolvedValueOnce({ rows: [] }) // insert audit
-          .mockResolvedValueOnce({ rows: [] }), // COMMIT
+        query: jest.fn().mockImplementation(async (sql: string) => {
+          if (/booking\.shuttle_trips/i.test(sql)) {
+            return { rows: [{ id: 1, vehicle_id: 1, status: 'scheduled', booking_cutoff_at: futureCutoff }] };
+          }
+          if (/booking\.bookings.*WHERE.*status IN/is.test(sql)) {
+            return { rows: [] };
+          }
+          if (/UPDATE booking\.(holds|seat_holds)/i.test(sql)) {
+            return { rows: [], rowCount: 0 };
+          }
+          if (/booking\.vehicles/i.test(sql)) {
+            return { rows: [{ seat_layout_json: { rows: 10, cols: 3, aisleAfterCol: 2 } }] };
+          }
+          if (/booking\.seats/i.test(sql)) {
+            return {
+              rows: [
+                { id: 101, vehicle_id: 1, seat_label: '1A', row_no: 1, col_no: 1, is_window: true, is_aisle: false, is_accessible: false, is_available: true },
+                { id: 102, vehicle_id: 1, seat_label: '1B', row_no: 1, col_no: 2, is_window: false, is_aisle: true, is_accessible: false, is_available: true },
+              ],
+            };
+          }
+          if (/INSERT INTO booking\.bookings/i.test(sql)) {
+            return { rows: [{ id: 50, trip_id: 1, user_id: 3, party_size: 2, status: 'confirmed', created_at: new Date().toISOString() }] };
+          }
+          return { rows: [], rowCount: 1 };
+        }),
         release: jest.fn(),
       };
 
@@ -145,16 +155,28 @@ describe('Module 2 - Booking Service Tests (Interim Step 1.5)', () => {
       const futureCutoff = new Date(Date.now() + 3600000).toISOString();
 
       const mockClient = {
-        query: jest.fn()
-          .mockResolvedValueOnce({ rows: [] }) // BEGIN
-          .mockResolvedValueOnce({
-            rows: [{ id: 1, vehicle_id: 1, status: 'scheduled', booking_cutoff_at: futureCutoff }],
-          }) // SELECT trip
-          .mockResolvedValueOnce({ rows: [] }) // active booking check (none)
-          .mockResolvedValueOnce({
-            rows: [{ id: 101 }], // only 1 seat available, but partySize is 3
-          })
-          .mockResolvedValueOnce({ rows: [] }), // ROLLBACK
+        query: jest.fn().mockImplementation(async (sql: string) => {
+          if (/booking\.shuttle_trips/i.test(sql)) {
+            return { rows: [{ id: 1, vehicle_id: 1, status: 'scheduled', booking_cutoff_at: futureCutoff }] };
+          }
+          if (/booking\.bookings.*WHERE.*status IN/is.test(sql)) {
+            return { rows: [] };
+          }
+          if (/UPDATE booking\.(holds|seat_holds)/i.test(sql)) {
+            return { rows: [], rowCount: 0 };
+          }
+          if (/booking\.vehicles/i.test(sql)) {
+            return { rows: [{ seat_layout_json: { rows: 10, cols: 3, aisleAfterCol: 2 } }] };
+          }
+          if (/booking\.seats/i.test(sql)) {
+            return {
+              rows: [
+                { id: 101, vehicle_id: 1, seat_label: '1A', row_no: 1, col_no: 1, is_window: true, is_aisle: false, is_accessible: false, is_available: true },
+              ],
+            };
+          }
+          return { rows: [], rowCount: 1 };
+        }),
         release: jest.fn(),
       };
 
@@ -175,21 +197,31 @@ describe('Module 2 - Booking Service Tests (Interim Step 1.5)', () => {
       const futureCutoff = new Date(Date.now() + 3600000).toISOString();
 
       const mockClient = {
-        query: jest.fn()
-          .mockResolvedValueOnce({ rows: [] }) // BEGIN
-          .mockResolvedValueOnce({
-            rows: [{ id: 1, vehicle_id: 1, status: 'scheduled', booking_cutoff_at: futureCutoff }],
-          }) // SELECT trip
-          .mockResolvedValueOnce({ rows: [] }) // active booking check (none)
-          .mockResolvedValueOnce({
-            rows: [{ id: 999 }], // exactly 1 seat
-          })
-          .mockResolvedValueOnce({
-            rows: [{ id: 51, trip_id: 1, user_id: 5, party_size: 1, status: 'confirmed', created_at: new Date().toISOString() }],
-          }) // insert booking
-          .mockResolvedValueOnce({ rows: [] }) // insert seat 999
-          .mockResolvedValueOnce({ rows: [] }) // insert audit
-          .mockResolvedValueOnce({ rows: [] }), // COMMIT
+        query: jest.fn().mockImplementation(async (sql: string) => {
+          if (/booking\.shuttle_trips/i.test(sql)) {
+            return { rows: [{ id: 1, vehicle_id: 1, status: 'scheduled', booking_cutoff_at: futureCutoff }] };
+          }
+          if (/booking\.bookings.*WHERE.*status IN/is.test(sql)) {
+            return { rows: [] };
+          }
+          if (/UPDATE booking\.(holds|seat_holds)/i.test(sql)) {
+            return { rows: [], rowCount: 0 };
+          }
+          if (/booking\.vehicles/i.test(sql)) {
+            return { rows: [{ seat_layout_json: { rows: 10, cols: 3, aisleAfterCol: 2 } }] };
+          }
+          if (/booking\.seats/i.test(sql)) {
+            return {
+              rows: [
+                { id: 999, vehicle_id: 1, seat_label: '1A', row_no: 1, col_no: 1, is_window: true, is_aisle: false, is_accessible: false, is_available: true },
+              ],
+            };
+          }
+          if (/INSERT INTO booking\.bookings/i.test(sql)) {
+            return { rows: [{ id: 51, trip_id: 1, user_id: 5, party_size: 1, status: 'confirmed', created_at: new Date().toISOString() }] };
+          }
+          return { rows: [], rowCount: 1 };
+        }),
         release: jest.fn(),
       };
 
@@ -304,15 +336,18 @@ describe('Module 2 - Booking Service Tests (Interim Step 1.5)', () => {
     test('Booking owner successfully cancels booking (200 OK)', async () => {
       const token = makeToken(9); // user 9
       const mockClient = {
-        query: jest.fn()
-          .mockResolvedValueOnce({ rows: [] }) // BEGIN
-          .mockResolvedValueOnce({
-            rows: [{ id: 105, user_id: 9, trip_id: 1, status: 'confirmed' }],
-          })
-          .mockResolvedValueOnce({ rows: [] }) // release seats
-          .mockResolvedValueOnce({ rows: [] }) // update booking
-          .mockResolvedValueOnce({ rows: [] }) // insert audit
-          .mockResolvedValueOnce({ rows: [] }), // COMMIT
+        query: jest.fn().mockImplementation(async (sql: string) => {
+          if (/SELECT.*FROM booking\.bookings.*WHERE.*id = \$1/i.test(sql)) {
+            return { rows: [{ id: 105, user_id: 9, trip_id: 1, status: 'confirmed' }] };
+          }
+          if (/SELECT.*FROM booking\.shuttle_trips/i.test(sql)) {
+            return { rows: [{ id: 1, vehicle_id: 1, status: 'scheduled' }] };
+          }
+          if (/SELECT.*FROM booking\.waitlist_entries/i.test(sql)) {
+            return { rows: [] };
+          }
+          return { rows: [], rowCount: 1 };
+        }),
         release: jest.fn(),
       };
 
