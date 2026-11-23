@@ -14,6 +14,7 @@ import { BookRide } from './pages/BookRide';
 import { MyBookings } from './pages/MyBookings';
 import { DriverDashboard } from './pages/DriverDashboard';
 import { StartRide } from './pages/StartRide';
+import { RecentRides } from './pages/RecentRides';
 
 import { User, getAvatarInitials } from './types';
 import {
@@ -37,6 +38,7 @@ export const App: React.FC = () => {
     | 'bookings'
     | 'driver'
     | 'start-ride'
+    | 'recent-rides'
     | 'login'
     | 'register'
   >(() => {
@@ -283,6 +285,10 @@ export const App: React.FC = () => {
 
         {viewMode === 'start-ride' && (
           <StartRide onBack={() => setViewMode('driver')} />
+        )}
+
+        {viewMode === 'recent-rides' && (
+          <RecentRides onBack={() => setViewMode('home')} />
         )}
       </div>
 
