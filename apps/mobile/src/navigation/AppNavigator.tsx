@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -6,6 +6,7 @@ import { Text } from 'react-native';
 
 import { useAuthStore } from '../store/authStore';
 import { Colors } from '../theme';
+import { Loader } from '../components/Loader';
 import { AuthStackParamList, MainTabParamList } from './types';
 
 import { LoginScreen } from '../screens/LoginScreen';
@@ -73,6 +74,16 @@ const MainNavigator = () => {
 
 export const AppNavigator = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isRestoringSession = useAuthStore((state) => state.isRestoringSession);
+  const initializeAuth = useAuthStore((state) => state.initializeAuth);
+
+  useEffect(() => {
+    initializeAuth();
+  }, [initializeAuth]);
+
+  if (isRestoringSession) {
+    return <Loader message="Restoring session..." />;
+  }
 
   return (
     <NavigationContainer>
