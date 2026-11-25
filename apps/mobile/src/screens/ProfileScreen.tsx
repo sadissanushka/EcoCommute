@@ -43,9 +43,22 @@ export const ProfileScreen = () => {
           <View style={styles.roleBadge}>
             <Text style={styles.roleText}>{user?.role?.toUpperCase() || 'EMPLOYEE'}</Text>
           </View>
+          <Text style={{ color: Colors.primary, fontSize: 12, fontWeight: '700', marginTop: 8 }}>
+            🌱 EcoCommute Level 3 Contributor (142.8 kg CO₂ Abated)
+          </Text>
         </Card>
 
         <Card>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Digital Pass Status</Text>
+            <Text style={styles.verifiedText}>✔ Corporate Pass Active (All Zones)</Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Transit Preference</Text>
+            <Text style={styles.infoVal}>EV Shuttle & Carpool Leg</Text>
+          </View>
+          <View style={styles.divider} />
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Corporate Verification</Text>
             <Text style={user?.corporateVerified ? styles.verifiedText : styles.pendingText}>

@@ -15,6 +15,8 @@ import { MyBookings } from './pages/MyBookings';
 import { DriverDashboard } from './pages/DriverDashboard';
 import { StartRide } from './pages/StartRide';
 import { RecentRides } from './pages/RecentRides';
+import { CorporatePass } from './pages/CorporatePass';
+import { CommutePreferences } from './pages/CommutePreferences';
 
 import { User, getAvatarInitials } from './types';
 import {
@@ -39,6 +41,8 @@ export const App: React.FC = () => {
     | 'driver'
     | 'start-ride'
     | 'recent-rides'
+    | 'pass'
+    | 'preferences'
     | 'login'
     | 'register'
   >(() => {
@@ -289,6 +293,14 @@ export const App: React.FC = () => {
 
         {viewMode === 'recent-rides' && (
           <RecentRides onBack={() => setViewMode('home')} />
+        )}
+
+        {viewMode === 'pass' && (
+          <CorporatePass onBack={() => setViewMode('home')} />
+        )}
+
+        {viewMode === 'preferences' && (
+          <CommutePreferences onBack={() => setViewMode('home')} />
         )}
       </div>
 
