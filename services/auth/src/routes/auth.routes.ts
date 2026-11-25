@@ -17,7 +17,7 @@ const registerSchema = z.object({
   email: z.string().email('Invalid email format'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   fullName: z.string().min(2, 'Full name must be at least 2 characters'),
-  role: z.enum(['employee', 'driver', 'admin', 'policymaker']).default('employee'),
+  role: z.string().optional().default('employee'),
   gender: z.string().optional(),
   companyId: z.number().int().positive().optional(),
   workCode: z.string().optional(),
@@ -71,6 +71,21 @@ authRouter.post('/register', async (req: Request, res: Response) => {
 
   const { email, password, fullName, role, gender, companyId } = parseResult.data;
 
+  // Security: Public registration is strictly restricted to employees.
+  // Prevent privilege escalation to admin, driver, or policymaker.
+  if (role && role !== 'employee') {
+    res.status(400).json({
+      error: {
+        code: 'INVALID_ROLE',
+        message: 'Public registration is restricted to employee accounts only',
+        details: { requestedRole: role, allowedRoles: ['employee'] },
+      },
+    });
+    return;
+  }
+
+  const assignedRole = 'employee';
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -120,7 +135,7 @@ authRouter.post('/register', async (req: Request, res: Response) => {
       `INSERT INTO core.users (company_id, email, full_name, role, gender, corporate_verified)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, company_id, email, full_name, role, corporate_verified, created_at`,
-      [resolvedCompanyId, email.toLowerCase(), fullName, role, gender || null, false]
+      [resolvedCompanyId, email.toLowerCase(), fullName, assignedRole, gender || null, false]
     );
     const newUser = userRes.rows[0];
 
