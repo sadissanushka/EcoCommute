@@ -263,6 +263,157 @@ bookingRouter.get('/trips/:id', async (req: Request, res: Response) => {
   }
 });
 
+// GET /trips/:id/manifest - Passenger manifest for driver and participants
+bookingRouter.get('/trips/:id/manifest', async (req: Request, res: Response) => {
+  const tripId = parseInt(req.params.id, 10);
+  if (isNaN(tripId)) {
+    res.status(400).json({ error: { code: 'INVALID_ID', message: 'Trip ID must be integer', details: {} } });
+    return;
+  }
+
+  try {
+    const manifestRes = await pool.query(
+      `SELECT
+        b.id AS booking_id,
+        b.user_id,
+        u.full_name AS passenger_name,
+        u.email AS passenger_email,
+        u.phone AS passenger_phone,
+        c.name AS company_name,
+        b.party_size,
+        b.status AS booking_status,
+        b.created_at AS booked_at,
+        b.boarded_at,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'seatId', s.id,
+              'seatLabel', s.seat_label,
+              'row', s.row_no,
+              'col', s.col_no
+            )
+          ) FILTER (WHERE s.id IS NOT NULL),
+          '[]'::json
+        ) AS assigned_seats
+      FROM booking.bookings b
+      JOIN core.users u ON u.id = b.user_id
+      LEFT JOIN core.companies c ON c.id = u.company_id
+      LEFT JOIN booking.seat_assignments sa ON sa.booking_id = b.id AND sa.status = 'active'
+      LEFT JOIN booking.seats s ON s.id = sa.seat_id
+      WHERE b.trip_id = $1 AND b.status IN ('confirmed', 'boarded', 'completed')
+      GROUP BY b.id, b.user_id, u.full_name, u.email, u.phone, c.name, b.party_size, b.status, b.created_at, b.boarded_at
+      ORDER BY b.created_at ASC`,
+      [tripId]
+    );
+
+    const manifest = manifestRes.rows.map((row) => {
+      // Deterministic 6-digit verification code derived from bookingId, userId, and tripId
+      const codeInt = (parseInt(crypto.createHash('sha256').update(`${row.booking_id}:${row.user_id}:${tripId}`).digest('hex').substring(0, 8), 16) % 900000) + 100000;
+      const passCode = codeInt.toString();
+      return {
+        id: `#DX-${row.booking_id.toString().padStart(4, '0')}`,
+        bookingId: row.booking_id,
+        userId: row.user_id,
+        name: row.passenger_name,
+        email: row.passenger_email,
+        phone: row.passenger_phone,
+        org: row.company_name || 'Sysco LABS',
+        partySize: row.party_size,
+        status: row.booking_status === 'boarded' ? 'Boarded' : 'Waiting',
+        bookedAt: row.booked_at,
+        boardedAt: row.boarded_at,
+        seat: row.assigned_seats.length > 0 ? `Seat ${row.assigned_seats[0].seatLabel}` : 'Seat Unassigned',
+        assignedSeats: row.assigned_seats,
+        otp: passCode,
+        passCode: passCode,
+      };
+    });
+
+    res.status(200).json({ tripId, manifest });
+  } catch (err: any) {
+    console.error('Error in GET /trips/:id/manifest:', err);
+    res.status(500).json({
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch trip manifest', details: { error: err.message } }
+    });
+  }
+});
+
+// POST /trips/:id/board - Boarding check-in via booking ID or pass code
+bookingRouter.post('/trips/:id/board', async (req: Request, res: Response) => {
+  const tripId = parseInt(req.params.id, 10);
+  if (isNaN(tripId)) {
+    res.status(400).json({ error: { code: 'INVALID_ID', message: 'Trip ID must be integer', details: {} } });
+    return;
+  }
+
+  const { bookingId, passCode } = req.body;
+  if (!bookingId && !passCode) {
+    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'bookingId or passCode is required', details: {} } });
+    return;
+  }
+
+  try {
+    let targetBookingId = bookingId;
+
+    if (!targetBookingId && passCode) {
+      // Find matching booking by passCode
+      const allRes = await pool.query(
+        `SELECT b.id, b.user_id FROM booking.bookings b WHERE b.trip_id = $1 AND b.status IN ('confirmed', 'boarded')`,
+        [tripId]
+      );
+      for (const row of allRes.rows) {
+        const codeInt = (parseInt(crypto.createHash('sha256').update(`${row.id}:${row.user_id}:${tripId}`).digest('hex').substring(0, 8), 16) % 900000) + 100000;
+        if (codeInt.toString() === passCode.toString().trim()) {
+          targetBookingId = row.id;
+          break;
+        }
+      }
+    }
+
+    if (!targetBookingId) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No matching booking found for this code on this trip', details: {} } });
+      return;
+    }
+
+    const updateRes = await pool.query(
+      `UPDATE booking.bookings
+       SET status = 'boarded', boarded_at = NOW(), updated_at = NOW()
+       WHERE id = $1 AND trip_id = $2
+       RETURNING id, trip_id, user_id, status, boarded_at`,
+      [targetBookingId, tripId]
+    );
+
+    if (updateRes.rows.length === 0) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Booking not found for this trip', details: {} } });
+      return;
+    }
+
+    const passengerRes = await pool.query(
+      `SELECT u.full_name, u.email, c.name as company_name FROM core.users u
+       LEFT JOIN core.companies c ON c.id = u.company_id
+       WHERE u.id = $1`,
+      [updateRes.rows[0].user_id]
+    );
+
+    const passenger = passengerRes.rows[0] || {};
+
+    res.status(200).json({
+      success: true,
+      bookingId: targetBookingId,
+      passengerName: passenger.full_name,
+      passengerEmail: passenger.email,
+      company: passenger.company_name,
+      status: 'Boarded',
+      boardedAt: updateRes.rows[0].boarded_at,
+    });
+  } catch (err: any) {
+    console.error('Error in POST /trips/:id/board:', err);
+    res.status(500).json({
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to board passenger', details: { error: err.message } }
+    });
+  }
+});
+
 // ============================================================================
 // 2. ADMIN TRIP & VEHICLE MANAGEMENT
 // ============================================================================

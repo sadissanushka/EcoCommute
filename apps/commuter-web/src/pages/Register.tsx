@@ -145,7 +145,7 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onGoToLogin }) =>
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Sarah Taylor"
+                  placeholder="Full Name (as per corporate ID)"
                   className="w-full bg-surface-container-low text-on-surface pl-11 pr-4 py-3 rounded-xl text-sm outline-none focus:bg-surface-container focus:ring-2 focus:ring-primary transition-all placeholder:text-outline"
                 />
               </div>

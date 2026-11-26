@@ -1,37 +1,56 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { bookingApi } from '../api/client';
+import { ManifestPassenger } from '../types';
 
 interface StartRideProps {
   onBack?: () => void;
   onScanPassClick?: () => void;
   onNavigationClick?: () => void;
+  tripId?: number;
 }
 
 export const StartRide: React.FC<StartRideProps> = ({
   onBack,
   onScanPassClick,
   onNavigationClick,
+  tripId = 1,
 }) => {
   const [isTripActive, setIsTripActive] = useState(false);
   const [otpInput, setOtpInput] = useState('');
-  const [verifiedRiders, setVerifiedRiders] = useState<string[]>(['Sarah K.']);
+  const [passengers, setPassengers] = useState<ManifestPassenger[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
-  const passengers = [
-    { name: 'Sarah K.', stop: 'Oakwood Gate', status: 'Boarded', otp: '849204' },
-    { name: 'Marcus L.', stop: 'Cornerstone Ave Hub', status: 'Waiting', otp: '194820' },
-    { name: 'Elena R.', stop: 'Tech Park East Entrance', status: 'Waiting', otp: '339182' },
-  ];
+  const loadManifest = async () => {
+    try {
+      setLoading(true);
+      const list = await bookingApi.getTripManifest(tripId);
+      setPassengers(list);
+    } catch (err) {
+      console.warn('Failed to load manifest for StartRide:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const handleVerifyOtp = () => {
-    if (!otpInput) return;
-    const match = passengers.find((p) => p.otp === otpInput.trim() || otpInput.trim() === '123456');
-    if (match) {
-      if (!verifiedRiders.includes(match.name)) {
-        setVerifiedRiders((prev) => [...prev, match.name]);
+  useEffect(() => {
+    loadManifest();
+  }, [tripId]);
+
+  const boardedCount = passengers.filter((p) => p.status === 'Boarded').length;
+
+  const handleVerifyOtp = async () => {
+    if (!otpInput.trim()) return;
+    try {
+      const res = await bookingApi.boardPassenger(tripId, { passCode: otpInput.trim() });
+      if (res.success) {
+        setPassengers((prev) =>
+          prev.map((p) => (p.bookingId === res.bookingId ? { ...p, status: 'Boarded' as const } : p))
+        );
+        setOtpInput('');
+        alert(`Passenger ${res.passengerName} verified and boarded.`);
       }
-      setOtpInput('');
-      alert(`OTP Verified! ${match.name} marked as Boarded.`);
-    } else {
-      alert('Invalid OTP. Please check passenger cryptographic token.');
+    } catch (err: any) {
+      alert(err.message || 'Invalid OTP. Please check passenger cryptographic token.');
     }
   };
 
@@ -122,7 +141,7 @@ export const StartRide: React.FC<StartRideProps> = ({
             </p>
           </div>
           <span className="text-xs font-bold text-primary">
-            {verifiedRiders.length} / {passengers.length} Boarded
+            {boardedCount} / {passengers.length} Boarded
           </span>
         </div>
 
@@ -156,16 +175,19 @@ export const StartRide: React.FC<StartRideProps> = ({
 
         {/* Passenger List */}
         <div className="space-y-2 pt-1">
-          {passengers.map((p, idx) => {
-            const isBoarded = verifiedRiders.includes(p.name);
+          {passengers.length === 0 && !loading && (
+            <p className="text-xs text-on-surface-variant text-center py-2">No riders booked for this trip yet.</p>
+          )}
+          {passengers.map((p) => {
+            const isBoarded = p.status === 'Boarded';
             return (
               <div
-                key={idx}
+                key={p.bookingId}
                 className="flex items-center justify-between p-2.5 bg-surface-container-low rounded-xl border border-outline-variant/20"
               >
                 <div>
                   <div className="font-bold text-xs text-on-surface">{p.name}</div>
-                  <div className="text-[10px] text-on-surface-variant">Stop: {p.stop}</div>
+                  <div className="text-[10px] text-on-surface-variant">{p.org} • {p.seat}</div>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -179,7 +201,7 @@ export const StartRide: React.FC<StartRideProps> = ({
                         : 'bg-secondary-fixed text-on-secondary-fixed'
                     }`}
                   >
-                    {isBoarded ? 'Boarded' : 'Pending'}
+                    {isBoarded ? 'Boarded' : 'Waiting'}
                   </span>
                 </div>
               </div>

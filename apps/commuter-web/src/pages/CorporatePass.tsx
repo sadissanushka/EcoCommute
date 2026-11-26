@@ -7,29 +7,41 @@ interface CorporatePassProps {
 }
 
 export const CorporatePass: React.FC<CorporatePassProps> = ({ user, onBack }) => {
-  const [secondsRemaining, setSecondsRemaining] = useState<number>(24);
-  const [totpToken, setTotpToken] = useState<string>('849204');
+  // Deterministic TOTP derived from authenticated user attributes and 30-second epoch slots
+  const computeDeterministicTotp = (uid: number | string, cid: number | string, slot: number): string => {
+    const seed = `pass:${uid}:${cid}:${slot}`;
+    let hash = 5381;
+    for (let i = 0; i < seed.length; i++) {
+      hash = ((hash << 5) + hash) + seed.charCodeAt(i);
+      hash |= 0;
+    }
+    return ((Math.abs(hash) % 900000) + 100000).toString();
+  };
+
+  const getSecondsRemaining = () => 30 - (Math.floor(Date.now() / 1000) % 30);
+  const getCurrentSlot = () => Math.floor(Date.now() / 30000);
+
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(getSecondsRemaining());
+  const [totpToken, setTotpToken] = useState<string>(() =>
+    computeDeterministicTotp(user?.id || 1, user?.companyId || 1, getCurrentSlot())
+  );
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setSecondsRemaining((prev) => {
-        if (prev <= 1) {
-          // Regenerate dynamic 6-digit TOTP token
-          const newToken = Math.floor(100000 + Math.random() * 900000).toString();
-          setTotpToken(newToken);
-          return 30;
-        }
-        return prev - 1;
-      });
+      const remaining = getSecondsRemaining();
+      setSecondsRemaining(remaining);
+      if (remaining === 30 || remaining === 1) {
+        setTotpToken(computeDeterministicTotp(user?.id || 1, user?.companyId || 1, getCurrentSlot()));
+      }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [user]);
 
-  const companyName = user?.companyName || 'Dialog Axiata PLC';
-  const employeeName = user?.fullName || 'Sarah Jenkins';
-  const employeeId = user?.id ? `EMP-${user.id}` : 'EMP-8842';
-  const corpId = user?.companyId ? `Corp ID #${user.companyId}` : 'Corp ID #941';
+  const companyName = user?.companyName || (user?.email?.includes('@syscolabs') ? 'Sysco LABS' : 'Corporate Mobility Partner');
+  const employeeName = user?.fullName || user?.email?.split('@')[0] || 'Corporate Commuter';
+  const employeeId = user?.id ? `EMP-${user.id.toString().padStart(4, '0')}` : 'EMP-0100';
+  const corpId = user?.companyId ? `Corp ID #${user.companyId}` : 'Corp ID #101';
 
   return (
     <main className="flex flex-col relative w-full min-h-[calc(100vh-64px)] bg-surface font-sans max-w-md mx-auto pb-24">

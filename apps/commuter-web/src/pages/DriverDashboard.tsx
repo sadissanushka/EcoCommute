@@ -31,8 +31,7 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
         if (!isMounted) return;
 
         if (wallet) {
-          // Multiply balance or use ledger derived value
-          setReimbursementLkr(wallet.balanceLkr ? Number((wallet.balanceLkr * 34.6).toFixed(2)) : 14850.0);
+          setReimbursementLkr(wallet.balanceLkr || 0.0);
         }
 
         if (availableTrips && availableTrips.length > 0) {
@@ -192,15 +191,15 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
             <div className="flex justify-between items-start">
               <div>
                 <span className="text-xs font-bold text-primary uppercase tracking-wider">
-                  Tomorrow, 08:30 AM
+                  {trips[0]?.departAt ? new Date(trips[0].departAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '08:30 AM'}
                 </span>
                 <div className="flex items-center gap-1 text-[11px] text-on-surface-variant mt-0.5">
                   <span className="material-symbols-outlined text-[15px]">group</span>
-                  <span>3 Seats Available</span>
+                  <span>{trips[0]?.availableSeats ?? 3} Seats Available</span>
                 </div>
               </div>
               <span className="bg-secondary-fixed text-on-secondary-fixed text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                Confirmed
+                {trips[0]?.status || 'Confirmed'}
               </span>
             </div>
 
@@ -208,12 +207,12 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
               <div className="relative">
                 <div className="absolute -left-[15px] top-1 w-2 h-2 rounded-full bg-primary" />
                 <p className="text-[10px] uppercase font-semibold text-on-surface-variant">Origin</p>
-                <p className="text-xs font-bold text-on-surface">128 Oakwood Gardens, North Suburbs</p>
+                <p className="text-xs font-bold text-on-surface">{trips[0]?.originName || 'Battaramulla Junction'}</p>
               </div>
               <div className="relative">
                 <div className="absolute -left-[15px] top-1 w-2 h-2 rounded-full bg-secondary" />
                 <p className="text-[10px] uppercase font-semibold text-on-surface-variant">Destination</p>
-                <p className="text-xs font-bold text-on-surface">Tech District, Building C (Dialog HQ)</p>
+                <p className="text-xs font-bold text-on-surface">{trips[0]?.destinationName || 'Colombo Fort CBD'}</p>
               </div>
             </div>
 

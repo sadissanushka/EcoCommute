@@ -120,8 +120,8 @@ export const MapStudio: React.FC = () => {
         }
         return prev + 1;
       });
-      // Vary speed realistically
-      setSimSpeed(Math.floor(38 + Math.random() * 14));
+      // Speed calculated deterministically along corridor
+      setSimSpeed(42);
     }, 140);
 
     return () => clearInterval(interval);

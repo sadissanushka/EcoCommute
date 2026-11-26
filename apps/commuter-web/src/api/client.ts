@@ -1,4 +1,4 @@
-import { User, AuthTokens, ShuttleTrip, BookingConfirmation, MyBooking, WalletBalance, Transaction, LiveVehicleTelemetry, WaitlistEntry, SeatHold } from '../types';
+import { User, AuthTokens, ShuttleTrip, BookingConfirmation, MyBooking, WalletBalance, Transaction, LiveVehicleTelemetry, WaitlistEntry, SeatHold, ManifestPassenger } from '../types';
 
 const API_BASE = 'http://localhost:18080';
 
@@ -277,31 +277,15 @@ export const safetyApi = {
     lng?: number;
     note?: string;
   }): Promise<{ status: string; message: string; event: any }> {
-    try {
-      return await request<any>('/sos', {
-        method: 'POST',
-        body: JSON.stringify(params),
-      });
-    } catch {
-      return {
-        status: 'success',
-        message: 'Emergency SOS activated. Safety dispatchers have been notified.',
-        event: {
-          id: Math.floor(Math.random() * 9000) + 1000,
-          trigger: 'manual',
-          createdAt: new Date().toISOString(),
-        },
-      };
-    }
+    return await request<any>('/sos', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
   },
 
   async getSafetyTicket(): Promise<string> {
-    try {
-      const res = await request<any>('/safety/ticket', { method: 'POST' });
-      return res.ticket;
-    } catch {
-      return 'demo-safety-ticket';
-    }
+    const res = await request<any>('/safety/ticket', { method: 'POST' });
+    return res.ticket;
   },
 
   async getCorridor(tripId: number): Promise<{ lat: number; lng: number }[]> {
@@ -662,6 +646,23 @@ async getTripDetails(tripId: number): Promise<ShuttleTrip> {
     }
   },
 
+  async getTripManifest(tripId: number): Promise<ManifestPassenger[]> {
+    const res = await request<{ tripId: number; manifest: ManifestPassenger[] }>(`/trips/${Number(tripId)}/manifest`);
+    return res.manifest || [];
+  },
+
+  async boardPassenger(tripId: number, payload: { bookingId?: number; passCode?: string }): Promise<{
+    success: boolean;
+    bookingId: number;
+    passengerName: string;
+    status: string;
+    boardedAt?: string;
+  }> {
+    return await request<any>(`/trips/${Number(tripId)}/board`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
 };
 
 export interface RideMatchItem {
@@ -691,17 +692,10 @@ export const routingApi = {
     seats?: number;
     vehicle?: string;
   }) {
-    try {
-      return await request<any>('/rides', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-    } catch {
-      return {
-        message: 'Ride submitted (offline preview)',
-        data: { id: `${payload.type}-${Date.now()}`, ...payload },
-      };
-    }
+    return await request<any>('/rides', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
   async getMatches(rideId?: string): Promise<RideMatchItem[]> {
@@ -710,89 +704,47 @@ export const routingApi = {
       const res = await request<any>(`/matches${qs}`);
       return res.matches || [];
     } catch {
-      return [
-        {
-          id: 'match-offer-1-req-1',
-          offerId: 'offer-1',
-          requestId: 'req-1',
-          driverName: 'Sunil Perera (Lead Eng)',
-          riderName: 'Anushka Thisera',
-          directDistanceM: 12732,
-          detourAddedM: 506,
-          overlapPct: 75,
-          co2SavedKg: 1.17,
-          status: 'proposed',
-          driverVehicle: 'Toyota Prius (Hybrid) • WP-CAR-3912',
-          plannedPath: [
-            { lat: 6.904, lng: 79.954 },
-            { lat: 6.898, lng: 79.921 },
-            { lat: 6.9344, lng: 79.8428 },
-          ],
-        },
-      ];
+      return [];
     }
   },
 
   async confirmMatch(offerId: string, requestId: string, tripId: number = 1) {
-    try {
-      return await request<any>('/matches/confirm', {
-        method: 'POST',
-        body: JSON.stringify({ offerId, requestId, tripId }),
-      });
-    } catch {
-      return {
-        message: 'Match confirmed (offline preview)',
-        match: { offerId, requestId, status: 'confirmed' },
-        routeBoundaryPublished: false,
-      };
-    }
+    return await request<any>('/matches/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ offerId, requestId, tripId }),
+    });
   },
 };
-
 
 // 4. Wallet & Carbon Emission API
 export const walletApi = {
   async getBalance(): Promise<WalletBalance> {
     try {
       const res = await request<any>('/wallet/balance');
+      const balanceMinor = res.data?.balanceMinor ?? 0;
       return {
-        balanceLkr: (res.data?.balanceMinor || 42850) / 100,
-        balanceMinor: res.data?.balanceMinor || 42850,
-        currency: 'LKR',
-        co2SavedKg: 12.4,
-        corporateCardLast4: '8882',
+        balanceLkr: balanceMinor / 100,
+        balanceMinor,
+        currency: res.data?.currency || 'LKR',
+        co2SavedKg: res.data?.co2SavedKg ?? 0.0,
+        corporateCardLast4: res.data?.corporateCardLast4 || '8882',
       };
     } catch {
       return {
-        balanceLkr: 428.50,
-        balanceMinor: 42850,
+        balanceLkr: 0.0,
+        balanceMinor: 0,
         currency: 'LKR',
-        co2SavedKg: 12.4,
+        co2SavedKg: 0.0,
         corporateCardLast4: '8882',
       };
     }
   },
 
   async calculateCarbon(params: { distanceKm: number; fuelType: string; passengers: number }) {
-    try {
-      return await request<any>('/carbon/calculate', {
-        method: 'POST',
-        body: JSON.stringify(params),
-      });
-    } catch {
-      // DEFRA 2024 formula: 0.171 kg CO2e / km for average passenger car
-      const baseline = params.distanceKm * 0.171;
-      const shared = (baseline / Math.max(1, params.passengers)) * 0.45;
-      const saved = Math.max(0.1, baseline - shared);
-      return {
-        data: {
-          tripDistanceKm: params.distanceKm,
-          co2GeneratedKg: Number(shared.toFixed(2)),
-          co2AvoidedKg: Number(saved.toFixed(2)),
-          fuelCostLkr: Number((params.distanceKm * 28.5).toFixed(2)),
-        },
-      };
-    }
+    return await request<any>('/carbon/calculate', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
   },
 
   async calculateFairSplit(params: {
@@ -800,57 +752,18 @@ export const walletApi = {
     fuelCostMinor: number;
     riderDetoursKm: { riderId: number; directDistanceKm: number; detourDistanceKm: number }[];
   }) {
-    try {
-      return await request<any>('/fair-split/calculate', {
-        method: 'POST',
-        body: JSON.stringify(params),
-      });
-    } catch {
-      const count = params.riderDetoursKm.length || 1;
-      const share = params.fuelCostMinor / count / 100;
-      return {
-        data: {
-          totalCostLkr: params.fuelCostMinor / 100,
-          riderShares: params.riderDetoursKm.map((r, i) => ({
-            riderId: r.riderId,
-            shareLkr: Number(share.toFixed(2)),
-            detourWeightedRatio: 1 / count,
-          })),
-        },
-      };
-    }
+    return await request<any>('/fair-split/calculate', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
   },
 
   async getTransactions(): Promise<Transaction[]> {
     try {
       const res = await request<any>('/wallet/transactions');
-      return res.data || [];
+      return res.data?.entries || [];
     } catch {
-      return [
-        {
-          id: 1,
-          type: 'debit',
-          amount: 54.20,
-          description: 'Shell Express - Eco Fuel Reimbursement',
-          timestamp: 'Oct 24, 2026',
-          co2OffsetKg: 3.1,
-        },
-        {
-          id: 2,
-          type: 'debit',
-          amount: 42.15,
-          description: 'Chevron Station - Corporate Pool Share',
-          timestamp: 'Oct 22, 2026',
-          co2OffsetKg: 2.8,
-        },
-        {
-          id: 3,
-          type: 'credit',
-          amount: 500.00,
-          description: 'Monthly Corporate Commute Subsidy',
-          timestamp: 'Oct 01, 2026',
-        },
-      ];
+      return [];
     }
   },
 };

@@ -196,3 +196,21 @@ export interface LiveVehicleTelemetry {
   activeShuttlesCount: number;
   chargingCount: number;
 }
+
+export interface ManifestPassenger {
+  id: string;
+  bookingId: number;
+  userId: number;
+  name: string;
+  email: string;
+  phone?: string;
+  org: string;
+  partySize: number;
+  status: 'Waiting' | 'Boarded';
+  seat: string;
+  assignedSeats?: any[];
+  otp: string;
+  passCode: string;
+  bookedAt?: string;
+  boardedAt?: string;
+}

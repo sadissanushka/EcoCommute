@@ -11,8 +11,8 @@ export const PublishRideModal: React.FC<PublishRideModalProps> = ({
   onClose,
   onPublished,
 }) => {
-  const [origin, setOrigin] = useState('128 Oakwood Gardens, North Suburbs');
-  const [destination, setDestination] = useState('Dialog Axiata HQ (Tower 2)');
+  const [origin, setOrigin] = useState('Battaramulla Junction');
+  const [destination, setDestination] = useState('Colombo Fort CBD');
   const [departureDate, setDepartureDate] = useState('Tomorrow');
   const [departureTime, setDepartureTime] = useState('08:15 AM');
   const [availableSeats, setAvailableSeats] = useState(3);

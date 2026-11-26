@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SharedRouteMap, MapCoordinate } from '../components/SharedRouteMap';
+import { safetyApi } from '../api/client';
 
 interface ActiveDriverNavigationProps {
   onBack: () => void;
@@ -7,26 +8,58 @@ interface ActiveDriverNavigationProps {
   tripId?: number;
 }
 
-const DEFAULT_NAV_ROUTE: MapCoordinate[] = [
-  { lat: 6.9042, lng: 79.9547 }, // Malabe
-  { lat: 6.8996, lng: 79.9234 }, // Battaramulla
-  { lat: 6.9085, lng: 79.8967 }, // Rajagiriya
-  { lat: 6.9180, lng: 79.8620 }, // Lotus Rd corridor
-  { lat: 6.9344, lng: 79.8428 }, // Colombo Fort WTC Gate 2
-];
-
 export const ActiveDriverNavigation: React.FC<ActiveDriverNavigationProps> = ({
   onBack,
   onScanPassClick,
   tripId = 1,
 }) => {
-  const [speed, setSpeed] = useState<number>(38);
+  const [speed, setSpeed] = useState<number>(0);
+  const [routePolyline, setRoutePolyline] = useState<MapCoordinate[]>([]);
+  const [currentPos, setCurrentPos] = useState<{ lat: number; lng: number } | null>(null);
   const [currentTurn, setCurrentTurn] = useState({
     icon: 'turn_right',
     distanceM: 250,
-    instruction: 'Turn right onto Lotus Road',
-    target: 'WTC Gate 2 Express Corridor',
+    instruction: 'Follow designated commuter corridor',
+    target: 'Express Transit Lane',
   });
+
+  useEffect(() => {
+    safetyApi.getCorridor(tripId)
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setRoutePolyline(data);
+          if (!currentPos) {
+            setCurrentPos(data[0]);
+          }
+        }
+      })
+      .catch((err) => console.warn('Failed to fetch corridor for navigation:', err));
+  }, [tripId]);
+
+  useEffect(() => {
+    let watchId: number | null = null;
+    if (navigator.geolocation) {
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const spdKmh = pos.coords.speed !== null && pos.coords.speed >= 0
+            ? Math.round(pos.coords.speed * 3.6)
+            : 0;
+          setSpeed(spdKmh);
+          setCurrentPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        (err) => {
+          console.warn('Geolocation unavailable:', err.message);
+          setSpeed(0);
+        },
+        { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 }
+      );
+    }
+    return () => {
+      if (watchId !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
+  }, []);
 
   return (
     <div className="relative w-full h-[calc(100vh-64px)] overflow-hidden font-sans bg-surface flex flex-col">
@@ -94,13 +127,16 @@ export const ActiveDriverNavigation: React.FC<ActiveDriverNavigationProps> = ({
       {/* Main Map View */}
       <div className="w-full flex-1 relative">
         <SharedRouteMap
-          routePolyline={DEFAULT_NAV_ROUTE}
-          markers={[
-            { lat: 6.9042, lng: 79.9547, label: 'Origin', color: '#0d631b' },
-            { lat: 6.9180, lng: 79.8620, label: 'Turn', color: '#005db7' },
-            { lat: 6.9344, lng: 79.8428, label: 'WTC Fort', color: '#005db7' },
-          ]}
-          liveLocation={{ lat: 6.9110, lng: 79.8850, heading: 140 }}
+          routePolyline={routePolyline}
+          markers={
+            routePolyline.length >= 2
+              ? [
+                  { lat: routePolyline[0].lat, lng: routePolyline[0].lng, label: 'Origin', color: '#0d631b' },
+                  { lat: routePolyline[routePolyline.length - 1].lat, lng: routePolyline[routePolyline.length - 1].lng, label: 'Destination', color: '#005db7' },
+                ]
+              : []
+          }
+          liveLocation={currentPos ? { lat: currentPos.lat, lng: currentPos.lng, heading: 90 } : undefined}
           heightClass="h-full"
         />
       </div>
