@@ -303,6 +303,19 @@ export const safetyApi = {
       return 'demo-safety-ticket';
     }
   },
+
+  async getCorridor(tripId: number): Promise<{ lat: number; lng: number }[]> {
+    try {
+      // Proxied through Nginx or gateway to safety service
+      const res = await request<any>(`/safety/corridor/${tripId}`);
+      if (Array.isArray(res.coordinates) && res.coordinates.length > 0) {
+        return res.coordinates;
+      }
+    } catch {
+      // Fallback
+    }
+    return [];
+  },
 };
 
 // 3. Booking & Route Trips API

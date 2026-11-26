@@ -28,6 +28,17 @@ app.use('/otp', otpRouter);
 app.use('/safety/sos', sosRouter);
 app.use('/sos', sosRouter);
 
+app.get('/safety/corridor/:tripId', async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.tripId, 10);
+    const { loadRouteBoundary } = await import('./websocket/handler');
+    const coords = await loadRouteBoundary(tripId);
+    res.json({ tripId, coordinates: coords.map(([lng, lat]) => ({ lat, lng })) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export const server = http.createServer(app);
 
 // RFC 6455 WebSocket Server

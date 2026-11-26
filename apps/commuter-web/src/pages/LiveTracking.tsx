@@ -38,6 +38,7 @@ export const LiveTracking: React.FC<LiveTrackingProps> = ({
     (MapCoordinate & { speed?: number; heading?: number; accuracy?: number }) | null
   >(null);
   const [vehicleLocation, setVehicleLocation] = useState<MapCoordinate | null>(null);
+  const [smoothCorridor, setSmoothCorridor] = useState<MapCoordinate[]>([]);
 
   // Telematics & WebSocket state
   const [wsConnected, setWsConnected] = useState<boolean>(false);
@@ -138,10 +139,16 @@ export const LiveTracking: React.FC<LiveTrackingProps> = ({
 
         // Fetch detailed route stops and driver information
         try {
-          const details = await bookingApi.getTripDetails(resolvedTripId);
-          if (isMounted) setTripDetails(details);
+          const [details, corridor] = await Promise.all([
+            bookingApi.getTripDetails(resolvedTripId).catch(() => null),
+            safetyApi.getCorridor(resolvedTripId).catch(() => [] as MapCoordinate[]),
+          ]);
+          if (isMounted) {
+            if (details) setTripDetails(details);
+            if (corridor && corridor.length > 5) setSmoothCorridor(corridor);
+          }
         } catch {
-          // If trip details endpoint fails, trip will use fallback stops
+          // Fallback
         }
       } finally {
         if (isMounted) setIsLoading(false);
@@ -267,7 +274,7 @@ export const LiveTracking: React.FC<LiveTrackingProps> = ({
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsHost =
       window.location.port === '5173'
-        ? `${window.location.hostname || 'localhost'}:4400`
+        ? `${window.location.hostname || 'localhost'}:14400`
         : window.location.host;
     const wsUrl = `${protocol}//${wsHost}/ws`;
 
@@ -303,6 +310,9 @@ export const LiveTracking: React.FC<LiveTrackingProps> = ({
             setParticipantsCount(
               Array.isArray(msg.participants) ? msg.participants.length : 1
             );
+            if (Array.isArray(msg.corridor) && msg.corridor.length > 5) {
+              setSmoothCorridor(msg.corridor);
+            }
           }
 
           if (msg.type === 'location') {
@@ -371,8 +381,11 @@ export const LiveTracking: React.FC<LiveTrackingProps> = ({
     }
   };
 
-  // Compute Route Polyline & Markers from tripDetails or fallback
+  // Compute Route Polyline & Markers from high-res smooth corridor or stops
   const routePolyline: MapCoordinate[] = React.useMemo(() => {
+    if (smoothCorridor.length > 5) {
+      return smoothCorridor;
+    }
     if (tripDetails?.stops && tripDetails.stops.length >= 2) {
       return tripDetails.stops.map((s: any) => ({
         lat: Number(s.lat),
@@ -380,7 +393,7 @@ export const LiveTracking: React.FC<LiveTrackingProps> = ({
       }));
     }
     return DEFAULT_CORRIDOR_COORDS;
-  }, [tripDetails]);
+  }, [smoothCorridor, tripDetails]);
 
   const mapMarkers: SharedMapMarker[] = React.useMemo(() => {
     if (tripDetails?.stops && tripDetails.stops.length > 0) {

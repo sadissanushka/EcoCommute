@@ -93,14 +93,18 @@ export function handleWebSocketMessage(ws: ConnectedSocket, data: Buffer | strin
 
       const participants = roomManager.getTripParticipants(tripId);
 
-      ws.send(JSON.stringify({
-        v: 1,
-        type: 'joined',
-        tripId,
-        userId: ws.user.id,
-        role: ws.user.role,
-        participants,
-      }));
+      loadRouteBoundary(tripId).then((boundaryCoords) => {
+        const corridor = boundaryCoords.map(([lng, lat]) => ({ lat, lng }));
+        ws.send(JSON.stringify({
+          v: 1,
+          type: 'joined',
+          tripId,
+          userId: ws.user.id,
+          role: ws.user.role,
+          participants,
+          corridor,
+        }));
+      });
     });
     return;
   }

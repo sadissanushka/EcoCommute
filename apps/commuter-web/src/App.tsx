@@ -17,6 +17,9 @@ import { StartRide } from './pages/StartRide';
 import { RecentRides } from './pages/RecentRides';
 import { CorporatePass } from './pages/CorporatePass';
 import { CommutePreferences } from './pages/CommutePreferences';
+import { ScanPassengerPass } from './pages/ScanPassengerPass';
+import { ActiveDriverNavigation } from './pages/ActiveDriverNavigation';
+import { PublishRideModal } from './pages/PublishRideModal';
 
 import { User, getAvatarInitials } from './types';
 import {
@@ -40,6 +43,8 @@ export const App: React.FC = () => {
     | 'bookings'
     | 'driver'
     | 'start-ride'
+    | 'scan-pass'
+    | 'driver-nav'
     | 'recent-rides'
     | 'pass'
     | 'preferences'
@@ -51,6 +56,7 @@ export const App: React.FC = () => {
 
   const [selectedTripId, setSelectedTripId] = useState<number>(1);
   const [selectedPartySize, setSelectedPartySize] = useState<number>(1);
+  const [showPublishModal, setShowPublishModal] = useState<boolean>(false);
 
   const [registrationNotice, setRegistrationNotice] = useState<{
     email: string;
@@ -189,17 +195,25 @@ export const App: React.FC = () => {
                 ? 'Find Your Shuttle'
                 : viewMode === 'seats'
                   ? 'Seat Selection'
-                  : viewMode === 'rides'
-                    ? 'Ride Matching'
-                    : viewMode === 'tracking'
-                      ? 'Live Telematics'
-                      : viewMode === 'sos'
-                        ? 'Emergency SOS'
-                        : viewMode === 'wallet'
-                          ? 'Wallet & ESG'
-                          : viewMode === 'bookings'
-                            ? 'My Bookings'
-                            : 'Commuter Hub'}
+                  : viewMode === 'driver'
+                    ? 'Driver Dashboard'
+                    : viewMode === 'start-ride'
+                      ? 'Start Active Ride'
+                      : viewMode === 'scan-pass'
+                        ? 'Scan Passenger Pass'
+                        : viewMode === 'driver-nav'
+                          ? 'Driver HUD Navigation'
+                          : viewMode === 'tracking'
+                            ? 'Live Telematics'
+                            : viewMode === 'sos'
+                              ? 'Emergency SOS'
+                              : viewMode === 'wallet'
+                                ? 'Wallet & ESG'
+                                : viewMode === 'bookings'
+                                  ? 'My Bookings'
+                                  : viewMode === 'pass'
+                                    ? 'Corporate Pass'
+                                    : 'Home'}
             </span>
           </div>
 
@@ -233,9 +247,14 @@ export const App: React.FC = () => {
           <Home
             user={currentUser}
             onNavigateToBook={() => setViewMode('booking')}
-            onNavigateToTracking={() => setViewMode('tracking')}
+            onNavigateToTracking={(tripId) => {
+              setSelectedTripId(tripId);
+              setViewMode('tracking');
+            }}
             onNavigateToWallet={() => setViewMode('wallet')}
             onNavigateToSos={() => setViewMode('sos')}
+            onNavigateToPass={() => setViewMode('pass')}
+            onNavigateToDriver={() => setViewMode('driver')}
           />
         )}
 
@@ -288,13 +307,34 @@ export const App: React.FC = () => {
 
         {viewMode === 'driver' && (
           <DriverDashboard
-            onPublishClick={() => setViewMode('rides')}
+            onPublishClick={() => setShowPublishModal(true)}
             onStartRideClick={() => setViewMode('start-ride')}
+            onScanPassClick={() => setViewMode('scan-pass')}
+            onNavigationClick={() => setViewMode('driver-nav')}
           />
         )}
 
         {viewMode === 'start-ride' && (
-          <StartRide onBack={() => setViewMode('driver')} />
+          <StartRide
+            onBack={() => setViewMode('driver')}
+            onScanPassClick={() => setViewMode('scan-pass')}
+            onNavigationClick={() => setViewMode('driver-nav')}
+          />
+        )}
+
+        {viewMode === 'scan-pass' && (
+          <ScanPassengerPass
+            onBack={() => setViewMode('driver')}
+            onNavigateToNavigation={() => setViewMode('driver-nav')}
+          />
+        )}
+
+        {viewMode === 'driver-nav' && (
+          <ActiveDriverNavigation
+            onBack={() => setViewMode('driver')}
+            onScanPassClick={() => setViewMode('scan-pass')}
+            tripId={selectedTripId}
+          />
         )}
 
         {viewMode === 'recent-rides' && (
@@ -302,13 +342,22 @@ export const App: React.FC = () => {
         )}
 
         {viewMode === 'pass' && (
-          <CorporatePass onBack={() => setViewMode('home')} />
+          <CorporatePass user={currentUser} onBack={() => setViewMode('home')} />
         )}
 
         {viewMode === 'preferences' && (
           <CommutePreferences onBack={() => setViewMode('home')} />
         )}
       </div>
+
+      {/* Publish Carpool Ride Modal */}
+      <PublishRideModal
+        isOpen={showPublishModal}
+        onClose={() => setShowPublishModal(false)}
+        onPublished={() => {
+          setViewMode('driver');
+        }}
+      />
 
       {/* Floating Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-surface/90 backdrop-blur-xl border-t border-outline-variant/30 pb-safe shadow-[0_-2px_12px_rgba(0,0,0,0.05)]">
@@ -321,22 +370,22 @@ export const App: React.FC = () => {
               }`}
           >
             <span className="material-symbols-outlined text-[22px]">
-              grid_view
+              home
             </span>
-            <span className="text-[11px] mt-0.5">Hub</span>
+            <span className="text-[11px] mt-0.5">Home</span>
           </button>
 
           <button
-            onClick={() => setViewMode('rides')}
-            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all ${viewMode === 'rides'
+            onClick={() => setViewMode('driver')}
+            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all ${viewMode === 'driver' || viewMode === 'start-ride' || viewMode === 'scan-pass' || viewMode === 'driver-nav'
               ? 'text-primary font-bold'
               : 'text-on-surface-variant'
               }`}
           >
             <span className="material-symbols-outlined text-[22px]">
-              commute
+              directions_car
             </span>
-            <span className="text-[11px] mt-0.5">Matches</span>
+            <span className="text-[11px] mt-0.5">Driver</span>
           </button>
 
           <button

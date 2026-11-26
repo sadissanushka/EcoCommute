@@ -1,5 +1,6 @@
-import React from 'react';
-import { User, getFriendlyFirstName, getAvatarInitials } from '../types';
+import React, { useState, useEffect } from 'react';
+import { User, getFriendlyFirstName, getAvatarInitials, MyBooking, ShuttleTrip } from '../types';
+import { bookingApi, walletApi } from '../api/client';
 
 interface HomeProps {
   user: User | null;
@@ -7,6 +8,8 @@ interface HomeProps {
   onNavigateToTracking: (tripId: number) => void;
   onNavigateToWallet: () => void;
   onNavigateToSos: () => void;
+  onNavigateToPass: () => void;
+  onNavigateToDriver?: () => void;
 }
 
 export const Home: React.FC<HomeProps> = ({
@@ -15,8 +18,81 @@ export const Home: React.FC<HomeProps> = ({
   onNavigateToTracking,
   onNavigateToWallet,
   onNavigateToSos,
+  onNavigateToPass,
+  onNavigateToDriver,
 }) => {
   const firstName = getFriendlyFirstName(user?.fullName);
+
+  const [co2SavedKg, setCo2SavedKg] = useState<number>(12.4);
+  const [balanceLkr, setBalanceLkr] = useState<number>(428.5);
+  const [upcomingBooking, setUpcomingBooking] = useState<MyBooking | null>(null);
+  const [nextScheduledTrip, setNextScheduledTrip] = useState<ShuttleTrip | null>(null);
+  const [recentBookings, setRecentBookings] = useState<MyBooking[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadHomeData() {
+      try {
+        const [walletData, bookings, trips] = await Promise.all([
+          walletApi.getBalance().catch(() => ({ balanceLkr: 428.5, co2SavedKg: 12.4 })),
+          bookingApi.getMyBookings().catch(() => [] as MyBooking[]),
+          bookingApi.getTrips().catch(() => [] as ShuttleTrip[]),
+        ]);
+
+        if (!isMounted) return;
+
+        if (walletData) {
+          setBalanceLkr(walletData.balanceLkr ?? 428.5);
+          // If the user has confirmed bookings, dynamically add calculated savings to base
+          const bookingCount = bookings.filter((b) => b.status === 'confirmed').length;
+          const computedCo2 = Number((walletData.co2SavedKg + bookingCount * 2.1).toFixed(1));
+          setCo2SavedKg(computedCo2);
+        }
+
+        if (bookings && bookings.length > 0) {
+          setRecentBookings(bookings.slice(0, 3));
+          const active = bookings.find(
+            (b) => b.status === 'confirmed' || b.status === 'boarded'
+          );
+          if (active) {
+            setUpcomingBooking(active);
+          } else {
+            setUpcomingBooking(bookings[0]);
+          }
+        }
+
+        if (trips && trips.length > 0) {
+          setNextScheduledTrip(trips[0]);
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    loadHomeData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Format trip departure date/time for display
+  const formatDeparture = (dateStr?: string) => {
+    if (!dateStr) return 'Today, 5:30 PM';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' (' + d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ')';
+    } catch {
+      return 'Today, 5:30 PM';
+    }
+  };
+
+  const targetTripId = upcomingBooking?.tripId || nextScheduledTrip?.id || 1;
+  const originDisplay = upcomingBooking?.originName || nextScheduledTrip?.originName || 'Kaduwela Interchange';
+  const destDisplay = upcomingBooking?.destinationName || nextScheduledTrip?.destinationName || 'Colombo Fort CBD';
+  const routeNameDisplay = upcomingBooking?.routeName || nextScheduledTrip?.routeName || 'Kaduwela Express (Line 14-B)';
 
   return (
     <div className="flex flex-col w-full max-w-md mx-auto px-4 pb-24 gap-4 font-sans">
@@ -27,12 +103,15 @@ export const Home: React.FC<HomeProps> = ({
         </h1>
         <p className="text-xs text-on-surface-variant flex items-center gap-1.5 font-medium">
           <span className="material-symbols-outlined text-primary text-[18px]">eco</span>
-          You've saved <span className="text-primary font-bold">12.4kg</span> of CO₂ this month with corporate transit.
+          You've saved <span className="text-primary font-bold">{co2SavedKg}kg</span> of CO₂ this month with corporate transit.
         </p>
       </section>
 
-      {/* Next Ride Spotlight Card */}
-      <section className="relative overflow-hidden bg-primary-container rounded-2xl p-4 shadow-md text-on-primary-container transition-transform active:scale-[0.99] border border-primary/20">
+      {/* Next Ride Spotlight Card - FULL CARD CLICKABLE TO LIVE TRACKING */}
+      <section
+        onClick={() => onNavigateToTracking(targetTripId)}
+        className="relative overflow-hidden bg-primary-container rounded-2xl p-4 shadow-md text-on-primary-container transition-all active:scale-[0.99] border border-primary/20 cursor-pointer hover:shadow-lg group"
+      >
         <div className="absolute -right-8 -top-8 opacity-20 pointer-events-none">
           <svg fill="currentColor" height="140" viewBox="0 0 100 100" width="140">
             <path d="M50 0 L100 50 L50 100 L0 50 Z"></path>
@@ -43,11 +122,13 @@ export const Home: React.FC<HomeProps> = ({
           <div className="flex justify-between items-start">
             <div>
               <span className="text-[11px] font-semibold uppercase tracking-wider opacity-85">
-                Next Corporate Ride Scheduled
+                {upcomingBooking ? 'Your Confirmed Commute' : 'Next Shuttle Scheduled'}
               </span>
-              <h2 className="text-xl font-bold mt-0.5">Today, 5:30 PM</h2>
+              <h2 className="text-xl font-bold mt-0.5">
+                {formatDeparture(upcomingBooking?.departAt || nextScheduledTrip?.departAt)}
+              </h2>
             </div>
-            <div className="bg-surface-container-lowest/20 backdrop-blur-md p-2 rounded-xl">
+            <div className="bg-surface-container-lowest/20 backdrop-blur-md p-2 rounded-xl group-hover:scale-105 transition-transform">
               <span className="material-symbols-outlined text-on-primary-container text-[22px]">
                 directions_bus
               </span>
@@ -62,27 +143,22 @@ export const Home: React.FC<HomeProps> = ({
               <div className="w-2.5 h-2.5 rounded-full border-2 border-on-primary-container"></div>
             </div>
             <div className="flex flex-col gap-2 flex-1">
-              <div className="text-xs font-medium leading-none">Corporate Park (East Wing)</div>
-              <div className="text-xs font-bold leading-none">Green Valley Residence (Port City)</div>
+              <div className="text-xs font-medium leading-none truncate">{originDisplay}</div>
+              <div className="text-xs font-bold leading-none truncate">{destDisplay}</div>
             </div>
           </div>
 
           <div className="flex items-center justify-between mt-1 pt-2 border-t border-on-primary-container/20">
-            <div className="flex -space-x-2">
-              <div className="w-7 h-7 rounded-full bg-secondary-fixed text-on-secondary-fixed flex items-center justify-center text-[10px] font-bold border-2 border-primary-container">
-                ST
-              </div>
-              <div className="w-7 h-7 rounded-full bg-surface-container-highest text-on-surface flex items-center justify-center text-[10px] font-bold border-2 border-primary-container">
-                KP
-              </div>
-              <div className="w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center text-[10px] font-bold border-2 border-primary-container">
-                +3
-              </div>
+            <div className="text-[11px] font-semibold opacity-90 truncate max-w-[200px]">
+              {routeNameDisplay}
             </div>
 
             <button
-              onClick={() => onNavigateToTracking(1)}
-              className="bg-surface-container-lowest text-primary px-4 py-1.5 rounded-full text-xs font-bold shadow-sm hover:bg-surface-bright active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigateToTracking(targetTripId);
+              }}
+              className="bg-surface-container-lowest text-primary px-3.5 py-1.5 rounded-full text-xs font-bold shadow-sm hover:bg-surface-bright active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
             >
               <span>Live Telematics</span>
               <span className="material-symbols-outlined text-[16px]">radar</span>
@@ -91,10 +167,13 @@ export const Home: React.FC<HomeProps> = ({
         </div>
       </section>
 
-      {/* Corporate Commute Pass Banner */}
-      <div className="bg-surface-container-lowest border border-surface-container-high/60 p-3.5 rounded-xl flex items-center justify-between shadow-sm cursor-pointer hover:bg-surface-container-low transition-all">
+      {/* Corporate Commute Pass Banner - OPENS CORPORATE PASS */}
+      <div
+        onClick={onNavigateToPass}
+        className="bg-surface-container-lowest border border-surface-container-high/60 p-3.5 rounded-xl flex items-center justify-between shadow-sm cursor-pointer hover:bg-surface-container-low transition-all active:scale-[0.99] group"
+      >
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform">
             <span className="material-symbols-outlined text-[20px]">badge</span>
           </div>
           <div className="flex flex-col">
@@ -104,59 +183,90 @@ export const Home: React.FC<HomeProps> = ({
                 Active Tier 1
               </span>
             </div>
-            <span className="text-[11px] text-on-surface-variant">Sysco LABS Corporate Fleet Access</span>
+            <span className="text-[11px] text-on-surface-variant">
+              {user?.companyName ? `${user.companyName} Corporate Fleet Access` : 'Corporate Mobility Pass (NFC & QR)'}
+            </span>
           </div>
         </div>
-        <span className="material-symbols-outlined text-outline text-[20px]">chevron_right</span>
+        <span className="material-symbols-outlined text-outline text-[20px] group-hover:translate-x-0.5 transition-transform">
+          chevron_right
+        </span>
       </div>
 
       {/* Quick Action Bento Grid */}
       <section className="grid grid-cols-2 gap-3">
         <div
           onClick={onNavigateToBook}
-          className="bg-surface-container-low p-3.5 rounded-xl flex flex-col gap-2 shadow-sm transition-all hover:bg-surface-container-high cursor-pointer group border border-outline-variant/20"
+          className="bg-surface-container-low p-3.5 rounded-xl flex flex-col gap-2 shadow-sm transition-all hover:bg-surface-container-high cursor-pointer group border border-outline-variant/20 active:scale-[0.98]"
         >
           <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
             <span className="material-symbols-outlined text-[20px]">add_circle</span>
           </div>
           <div>
             <div className="text-xs font-bold text-on-surface">Book Shuttle</div>
-            <div className="text-[11px] text-on-surface-variant">Find seat on Line 14-B</div>
+            <div className="text-[11px] text-on-surface-variant">Find seat on route</div>
           </div>
         </div>
 
         <div
           onClick={onNavigateToWallet}
-          className="bg-surface-container-low p-3.5 rounded-xl flex flex-col gap-2 shadow-sm transition-all hover:bg-surface-container-high cursor-pointer group border border-outline-variant/20"
+          className="bg-surface-container-low p-3.5 rounded-xl flex flex-col gap-2 shadow-sm transition-all hover:bg-surface-container-high cursor-pointer group border border-outline-variant/20 active:scale-[0.98]"
         >
           <div className="w-9 h-9 rounded-full bg-secondary/10 flex items-center justify-center text-secondary group-hover:scale-110 transition-transform">
             <span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>
           </div>
           <div>
-            <div className="text-xs font-bold text-on-surface">Wallet & Emissions</div>
-            <div className="text-[11px] text-on-surface-variant">Balance: LKR 428.50</div>
+            <div className="text-xs font-bold text-on-surface">Wallet & ESG</div>
+            <div className="text-[11px] text-on-surface-variant">Balance: LKR {balanceLkr.toFixed(2)}</div>
           </div>
         </div>
       </section>
 
+      {/* Driver Mode Banner */}
+      {onNavigateToDriver && (
+        <div
+          onClick={onNavigateToDriver}
+          className="bg-surface-container-lowest border border-surface-container-high/60 p-3.5 rounded-xl flex items-center justify-between shadow-sm cursor-pointer hover:bg-surface-container-low transition-all active:scale-[0.99] group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center text-secondary group-hover:scale-105 transition-transform">
+              <span className="material-symbols-outlined text-[20px]">directions_car</span>
+            </div>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-on-surface">Driver Dashboard</span>
+                <span className="bg-secondary-fixed text-on-secondary-fixed text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                  Carpool Mode
+                </span>
+              </div>
+              <span className="text-[11px] text-on-surface-variant">
+                Publish rides, scan passenger passes & track navigation
+              </span>
+            </div>
+          </div>
+          <span className="material-symbols-outlined text-outline text-[20px] group-hover:translate-x-0.5 transition-transform">
+            chevron_right
+          </span>
+        </div>
+      )}
+
       {/* Live Map Preview Card */}
       <section
-        onClick={() => onNavigateToTracking(1)}
+        onClick={() => onNavigateToTracking(targetTripId)}
         className="relative rounded-2xl overflow-hidden shadow-md h-36 border border-outline-variant/20 cursor-pointer group"
       >
         <div className="absolute inset-0 bg-[#eef3ee] flex items-center justify-center">
           <svg className="w-full h-full object-cover" viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
             <path d="M 0 100 Q 150 40 250 120 T 400 80" fill="none" stroke="#0d631b" strokeWidth="4" strokeDasharray="6 4" />
             <circle cx="150" cy="70" r="8" fill="#0d631b" />
-            <circle cx="150" cy="70" r="14" fill="#0d631b" fillOpacity="0.2" className="animate-ping" />
-            <circle cx="280" cy="110" r="5" fill="#005db7" />
+            <circle cx="280" cy="110" r="6" fill="#005db7" />
           </svg>
         </div>
         <div className="absolute inset-0 bg-gradient-to-t from-surface-container-lowest via-transparent to-transparent"></div>
         <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
           <div>
-            <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">Active Corridor</span>
-            <div className="text-xs font-bold text-on-surface">Line 14-B Express Telematics</div>
+            <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">Active Telematics Stream</span>
+            <div className="text-xs font-bold text-on-surface">{routeNameDisplay}</div>
           </div>
           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-secondary group-hover:underline">
             View Live <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
