@@ -1,9 +1,10 @@
-import { User, AuthTokens, ShuttleTrip, BookingConfirmation, MyBooking, WalletBalance, Transaction, LiveVehicleTelemetry } from '../types';
+import { User, AuthTokens, ShuttleTrip, BookingConfirmation, MyBooking, WalletBalance, Transaction, LiveVehicleTelemetry, WaitlistEntry, SeatHold } from '../types';
 
-const API_BASE = 'http://localhost:8080';
+const API_BASE = 'http://localhost:18080';
 
-function getAccessToken(): string | null {
-  const storedToken = localStorage.getItem('access_token')?.trim();
+export function getAccessToken(): string | null {
+  // Check sessionStorage first so different tabs in the same browser maintain completely isolated employee sessions
+  const storedToken = (sessionStorage.getItem('access_token') || localStorage.getItem('access_token'))?.trim();
   if (!storedToken) return null;
 
   // Older sessions may have stored the complete Authorization value instead
@@ -13,6 +14,14 @@ function getAccessToken(): string | null {
 }
 
 export function setTokens(tokens: AuthTokens, user?: User) {
+  // 1. Primary tab-isolated storage
+  sessionStorage.setItem('access_token', tokens.accessToken);
+  sessionStorage.setItem('refresh_token', tokens.refreshToken);
+  if (user) {
+    sessionStorage.setItem('user_profile', JSON.stringify(user));
+  }
+
+  // 2. Also save to localStorage for persistence across single-tab reloads
   localStorage.setItem('access_token', tokens.accessToken);
   localStorage.setItem('refresh_token', tokens.refreshToken);
   if (user) {
@@ -21,13 +30,17 @@ export function setTokens(tokens: AuthTokens, user?: User) {
 }
 
 export function clearSession() {
+  sessionStorage.removeItem('access_token');
+  sessionStorage.removeItem('refresh_token');
+  sessionStorage.removeItem('user_profile');
+
   localStorage.removeItem('access_token');
   localStorage.removeItem('refresh_token');
   localStorage.removeItem('user_profile');
 }
 
 export function getCachedUser(): User | null {
-  const raw = localStorage.getItem('user_profile');
+  const raw = sessionStorage.getItem('user_profile') || localStorage.getItem('user_profile');
   if (!raw) return null;
   try {
     return JSON.parse(raw);
@@ -196,7 +209,8 @@ export const authApi = {
       throw new Error('Authentication tokens were not returned by the server');
     }
 
-    setTokens(tokens, user);
+    // Do NOT call setTokens(tokens, user) here.
+    // Registration redirects to Login page so user explicitly signs in.
     return { user, tokens };
   },
   
@@ -206,14 +220,17 @@ export const authApi = {
     try {
       const res = await request<any>('/auth/me');
       const u = res.user || res;
+      if (!u || !u.id) return cached;
       const user: User = {
-        id: u.id,
+        id: Number(u.id),
         email: u.email,
         fullName: u.fullName || u.full_name,
-        companyId: u.companyId || u.company_id,
+        companyId: Number(u.companyId ?? u.company_id ?? 1),
+        companyName: u.companyName || u.company_name,
         role: u.role,
-        verified: true,
+        verified: u.corporateVerified ?? u.corporate_verified ?? u.verified ?? true,
       };
+      sessionStorage.setItem('user_profile', JSON.stringify(user));
       localStorage.setItem('user_profile', JSON.stringify(user));
       return user;
     } catch {
@@ -359,45 +376,200 @@ async getTripDetails(tripId: number): Promise<ShuttleTrip> {
   };
 },
 
-async createBooking(tripId: number, seatId: number): Promise<BookingConfirmation> {
-  const numericTripId = Number(tripId);
-  const numericSeatId = Number(seatId);
+  async createBooking(
+    tripId: number,
+    partySize: number = 1,
+    seatIds?: number[],
+    requireAccessible?: boolean
+  ): Promise<BookingConfirmation> {
+    const numericTripId = Number(tripId);
+    if (!Number.isInteger(numericTripId) || numericTripId <= 0) {
+      throw new Error('Invalid trip ID.');
+    }
 
-  if (
-    !Number.isInteger(numericTripId) ||
-    numericTripId <= 0 ||
-    !Number.isInteger(numericSeatId) ||
-    numericSeatId <= 0
-  ) {
-    throw new Error('Invalid trip ID or seat ID.');
-  }
+    const payload: any = { partySize: Number(partySize) };
+    if (seatIds && seatIds.length > 0) {
+      payload.seatIds = seatIds.map(Number);
+    }
+    if (requireAccessible !== undefined) {
+      payload.requireAccessible = requireAccessible;
+    }
 
-  const res = await request<any>(`/trips/${numericTripId}/bookings`, {
-    method: 'POST',
-    body: JSON.stringify({
-      partySize: 1,
-      seatIds: [numericSeatId],
-    }),
-  });
+    const res = await request<any>(`/trips/${numericTripId}/bookings`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
 
-  if (
-    !res.booking ||
-    !Number.isInteger(Number(res.booking.id)) ||
-    !Array.isArray(res.booking.assignedSeatIds)
-  ) {
-    throw new Error('The server did not return a valid booking confirmation.');
-  }
+    if (
+      !res.booking ||
+      !Number.isInteger(Number(res.booking.id)) ||
+      !Array.isArray(res.booking.assignedSeatIds)
+    ) {
+      throw new Error('The server did not return a valid booking confirmation.');
+    }
 
-  return {
-    id: Number(res.booking.id),
-    tripId: Number(res.booking.tripId ?? res.booking.trip_id ?? numericTripId),
-    userId: Number(res.booking.userId ?? res.booking.user_id),
-    partySize: Number(res.booking.partySize ?? res.booking.party_size),
-    status: res.booking.status,
-    assignedSeatIds: res.booking.assignedSeatIds.map(Number),
-    createdAt: res.booking.createdAt ?? res.booking.created_at,
-  };
-},
+    return {
+      id: Number(res.booking.id),
+      tripId: Number(res.booking.tripId ?? res.booking.trip_id ?? numericTripId),
+      userId: Number(res.booking.userId ?? res.booking.user_id),
+      partySize: Number(res.booking.partySize ?? res.booking.party_size),
+      status: res.booking.status,
+      assignedSeatIds: res.booking.assignedSeatIds.map(Number),
+      allocationType: res.booking.allocationType,
+      createdAt: res.booking.createdAt ?? res.booking.created_at,
+    };
+  },
+
+  async createHold(
+    tripId: number,
+    partySize: number,
+    seatIds?: number[],
+    requireAccessible?: boolean
+  ): Promise<SeatHold> {
+    const numericTripId = Number(tripId);
+    if (!Number.isInteger(numericTripId) || numericTripId <= 0) {
+      throw new Error('Invalid trip ID.');
+    }
+
+    const payload: any = { partySize: Number(partySize) };
+    if (seatIds && seatIds.length > 0) {
+      payload.seatIds = seatIds.map(Number);
+    }
+    if (requireAccessible !== undefined) {
+      payload.requireAccessible = requireAccessible;
+    }
+
+    const res = await request<any>(`/trips/${numericTripId}/holds`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.hold || !Number.isInteger(Number(res.hold.id))) {
+      throw new Error('The server did not return a valid seat hold response.');
+    }
+
+    return {
+      id: Number(res.hold.id),
+      tripId: Number(res.hold.tripId ?? res.hold.trip_id ?? numericTripId),
+      userId: Number(res.hold.userId ?? res.hold.user_id),
+      partySize: Number(res.hold.partySize ?? res.hold.party_size),
+      status: res.hold.status,
+      expiresAt: res.hold.expiresAt ?? res.hold.expires_at,
+      expiresInSeconds: Number(res.hold.expiresInSeconds ?? 300),
+      seatIds: Array.isArray(res.hold.seatIds) ? res.hold.seatIds.map(Number) : [],
+      seats: res.hold.seats,
+      allocationType: res.hold.allocationType,
+    };
+  },
+
+  async getHold(tripId: number, holdId: number): Promise<SeatHold> {
+    const res = await request<any>(`/trips/${Number(tripId)}/holds/${Number(holdId)}`);
+    if (!res.hold) throw new Error('Hold details not found.');
+    return {
+      id: Number(res.hold.id),
+      tripId: Number(res.hold.tripId ?? res.hold.trip_id),
+      userId: Number(res.hold.userId ?? res.hold.user_id),
+      partySize: Number(res.hold.partySize ?? res.hold.party_size),
+      status: res.hold.status,
+      expiresAt: res.hold.expiresAt ?? res.hold.expires_at,
+      expiresInSeconds: Number(res.hold.expiresInSeconds ?? 0),
+      seatIds: Array.isArray(res.hold.seats) ? res.hold.seats.map((s: any) => Number(s.id)) : [],
+      seats: res.hold.seats,
+    };
+  },
+
+  async confirmHold(tripId: number, holdId: number): Promise<BookingConfirmation> {
+    const res = await request<any>(`/trips/${Number(tripId)}/holds/${Number(holdId)}/confirm`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+
+    if (!res.booking) {
+      throw new Error('Failed to confirm seat hold.');
+    }
+
+    return {
+      id: Number(res.booking.id),
+      tripId: Number(res.booking.tripId ?? res.booking.trip_id ?? tripId),
+      userId: Number(res.booking.userId ?? res.booking.user_id),
+      partySize: Number(res.booking.partySize ?? res.booking.party_size),
+      status: res.booking.status,
+      assignedSeatIds: Array.isArray(res.booking.assignedSeatIds)
+        ? res.booking.assignedSeatIds.map(Number)
+        : [],
+      createdAt: res.booking.createdAt ?? res.booking.created_at,
+    };
+  },
+
+  async releaseHold(tripId: number, holdId: number): Promise<void> {
+    await request<any>(`/trips/${Number(tripId)}/holds/${Number(holdId)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async joinWaitlist(tripId: number, partySize: number = 1): Promise<WaitlistEntry> {
+    const res = await request<any>(`/trips/${Number(tripId)}/waitlist`, {
+      method: 'POST',
+      body: JSON.stringify({ partySize: Number(partySize) }),
+    });
+
+    if (!res.waitlist) {
+      throw new Error('Failed to join waitlist.');
+    }
+
+    return {
+      id: Number(res.waitlist.id),
+      tripId: Number(res.waitlist.tripId ?? res.waitlist.trip_id ?? tripId),
+      userId: Number(res.waitlist.userId ?? res.waitlist.user_id),
+      partySize: Number(res.waitlist.partySize ?? res.waitlist.party_size),
+      status: res.waitlist.status,
+      position: Number(res.waitlist.position ?? 1),
+      createdAt: res.waitlist.createdAt ?? res.waitlist.created_at,
+    };
+  },
+
+  async getTripWaitlist(tripId: number): Promise<WaitlistEntry> {
+    const res = await request<any>(`/trips/${Number(tripId)}/waitlist/me`);
+    if (!res.waitlist) throw new Error('No active waitlist found for this trip.');
+    return {
+      id: Number(res.waitlist.id),
+      tripId: Number(res.waitlist.tripId ?? res.waitlist.trip_id ?? tripId),
+      userId: Number(res.waitlist.userId ?? res.waitlist.user_id),
+      partySize: Number(res.waitlist.partySize ?? res.waitlist.party_size),
+      status: res.waitlist.status,
+      position: Number(res.waitlist.position ?? 1),
+      bookingId: res.waitlist.bookingId ?? res.waitlist.booking_id,
+      createdAt: res.waitlist.createdAt ?? res.waitlist.created_at,
+    };
+  },
+
+  async getMyWaitlist(): Promise<WaitlistEntry[]> {
+    const res = await request<any>('/trips/waitlist/me');
+    if (!Array.isArray(res.waitlist)) {
+      return [];
+    }
+    return res.waitlist.map((w: any) => ({
+      id: Number(w.id),
+      tripId: Number(w.tripId ?? w.trip_id),
+      partySize: Number(w.partySize ?? w.party_size),
+      status: w.status,
+      position: Number(w.position ?? 1),
+      createdAt: w.createdAt ?? w.created_at,
+      departAt: w.departAt ?? w.depart_at,
+      arriveAt: w.arriveAt ?? w.arrive_at,
+      routeName: w.routeName ?? w.route_name,
+      originName: w.originName ?? w.origin_name,
+      destinationName: w.destinationName ?? w.destination_name,
+      plateNo: w.plateNo ?? w.plate_no,
+      vehicleType: w.vehicleType ?? w.vehicle_type,
+    }));
+  },
+
+  async leaveWaitlist(tripId: number): Promise<void> {
+    await request<any>(`/trips/${Number(tripId)}/waitlist/me`, {
+      method: 'DELETE',
+    });
+  },
 
 
   async getMyBookings(): Promise<MyBooking[]> {
@@ -410,6 +582,7 @@ async createBooking(tripId: number, seatId: number): Promise<BookingConfirmation
   return res.bookings.map((booking) => ({
     id: Number(booking.id),
     tripId: Number(booking.trip_id),
+    userId: booking.user_id ? Number(booking.user_id) : undefined,
     partySize: Number(booking.party_size),
     status: booking.status,
     createdAt: booking.created_at,

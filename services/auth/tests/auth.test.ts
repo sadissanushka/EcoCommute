@@ -52,6 +52,28 @@ describe('Module 2 - Authentication Service Tests (Interim Step 1.5)', () => {
       expect(res.body.error.code).toBe('VALIDATION_ERROR');
       expect(res.body.error.details.password).toBeDefined();
     });
+
+    test('POST /auth/register rejects attempt to register with role admin', async () => {
+      const res = await request(app).post('/auth/register').send({
+        email: 'admin.attempt@syscolabs.com',
+        password: 'Password123!',
+        fullName: 'Attacker Admin',
+        role: 'admin',
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('INVALID_ROLE');
+    });
+
+    test('POST /auth/register rejects attempt to register with role driver', async () => {
+      const res = await request(app).post('/auth/register').send({
+        email: 'driver.attempt@syscolabs.com',
+        password: 'Password123!',
+        fullName: 'Attacker Driver',
+        role: 'driver',
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('INVALID_ROLE');
+    });
   });
 
   describe('Login & Authentication Failures', () => {

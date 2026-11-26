@@ -1,0 +1,68 @@
+{
+  "buildFiles": [
+    "C:\\Users\\pasin\\Desktop\\stack\\EcoCommute\\apps\\mobile\\node_modules\\react-native-safe-area-context\\android\\src\\main\\jni\\CMakeLists.txt",
+    "C:\\Users\\pasin\\Desktop\\stack\\EcoCommute\\apps\\mobile\\node_modules\\react-native-screens\\android\\src\\main\\jni\\CMakeLists.txt",
+    "C:\\Users\\pasin\\Desktop\\stack\\EcoCommute\\apps\\mobile\\node_modules\\react-native\\ReactAndroid\\cmake-utils\\default-app-setup\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "C:\\Users\\pasin\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+      "-C",
+      "C:\\Users\\pasin\\Desktop\\stack\\EcoCommute\\apps\\mobile\\android\\app\\.cxx\\Debug\\2s5q6s3x\\x86",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "C:\\Users\\pasin\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+    "-C",
+    "C:\\Users\\pasin\\Desktop\\stack\\EcoCommute\\apps\\mobile\\android\\app\\.cxx\\Debug\\2s5q6s3x\\x86",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "appmodules::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "appmodules",
+      "output": "C:\\Users\\pasin\\Desktop\\stack\\EcoCommute\\apps\\mobile\\android\\app\\build\\intermediates\\cxx\\Debug\\2s5q6s3x\\obj\\x86\\libappmodules.so",
+      "runtimeFiles": [
+        "C:\\Users\\pasin\\Desktop\\stack\\EcoCommute\\apps\\mobile\\android\\app\\build\\intermediates\\cxx\\Debug\\2s5q6s3x\\obj\\x86\\libreact_codegen_safeareacontext.so",
+        "C:\\Users\\pasin\\Desktop\\stack\\EcoCommute\\apps\\mobile\\android\\app\\build\\intermediates\\cxx\\Debug\\2s5q6s3x\\obj\\x86\\libreact_codegen_rnscreens.so",
+        "C:\\Users\\pasin\\.gradle\\caches\\8.10.2\\transforms\\ecaf85af74491e145fd7c1a1474ff70a\\transformed\\fbjni-0.6.0\\prefab\\modules\\fbjni\\libs\\android.x86\\libfbjni.so",
+        "C:\\Users\\pasin\\.gradle\\caches\\8.10.2\\transforms\\5bfdf811371c923347fe339a9da5996d\\transformed\\react-android-0.76.9-debug\\prefab\\modules\\jsi\\libs\\android.x86\\libjsi.so",
+        "C:\\Users\\pasin\\.gradle\\caches\\8.10.2\\transforms\\5bfdf811371c923347fe339a9da5996d\\transformed\\react-android-0.76.9-debug\\prefab\\modules\\reactnative\\libs\\android.x86\\libreactnative.so"
+      ]
+    },
+    "react_codegen_rnscreens::@25bcbd507e98d3a854ad": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "react_codegen_rnscreens",
+      "output": "C:\\Users\\pasin\\Desktop\\stack\\EcoCommute\\apps\\mobile\\android\\app\\build\\intermediates\\cxx\\Debug\\2s5q6s3x\\obj\\x86\\libreact_codegen_rnscreens.so",
+      "runtimeFiles": [
+        "C:\\Users\\pasin\\.gradle\\caches\\8.10.2\\transforms\\5bfdf811371c923347fe339a9da5996d\\transformed\\react-android-0.76.9-debug\\prefab\\modules\\reactnative\\libs\\android.x86\\libreactnative.so",
+        "C:\\Users\\pasin\\.gradle\\caches\\8.10.2\\transforms\\5bfdf811371c923347fe339a9da5996d\\transformed\\react-android-0.76.9-debug\\prefab\\modules\\jsi\\libs\\android.x86\\libjsi.so",
+        "C:\\Users\\pasin\\.gradle\\caches\\8.10.2\\transforms\\ecaf85af74491e145fd7c1a1474ff70a\\transformed\\fbjni-0.6.0\\prefab\\modules\\fbjni\\libs\\android.x86\\libfbjni.so"
+      ]
+    },
+    "react_codegen_safeareacontext::@7984cd80db47aa7b952a": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "react_codegen_safeareacontext",
+      "output": "C:\\Users\\pasin\\Desktop\\stack\\EcoCommute\\apps\\mobile\\android\\app\\build\\intermediates\\cxx\\Debug\\2s5q6s3x\\obj\\x86\\libreact_codegen_safeareacontext.so",
+      "runtimeFiles": [
+        "C:\\Users\\pasin\\.gradle\\caches\\8.10.2\\transforms\\ecaf85af74491e145fd7c1a1474ff70a\\transformed\\fbjni-0.6.0\\prefab\\modules\\fbjni\\libs\\android.x86\\libfbjni.so",
+        "C:\\Users\\pasin\\.gradle\\caches\\8.10.2\\transforms\\5bfdf811371c923347fe339a9da5996d\\transformed\\react-android-0.76.9-debug\\prefab\\modules\\jsi\\libs\\android.x86\\libjsi.so",
+        "C:\\Users\\pasin\\.gradle\\caches\\8.10.2\\transforms\\5bfdf811371c923347fe339a9da5996d\\transformed\\react-android-0.76.9-debug\\prefab\\modules\\reactnative\\libs\\android.x86\\libreactnative.so"
+      ]
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "C:\\Users\\pasin\\AppData\\Local\\Android\\Sdk\\ndk\\26.1.10909125\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang.exe",
+      "cppCompilerExecutable": "C:\\Users\\pasin\\AppData\\Local\\Android\\Sdk\\ndk\\26.1.10909125\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe"
+    }
+  },
+  "cFileExtensions": [],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}

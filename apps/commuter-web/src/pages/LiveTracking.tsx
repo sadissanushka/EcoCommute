@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { safetyApi } from '../api/client';
+import { safetyApi, getAccessToken } from '../api/client';
 import { LiveVehicleTelemetry } from '../types';
 
 interface LiveTrackingProps {
@@ -32,7 +32,7 @@ export const LiveTracking: React.FC<LiveTrackingProps> = ({
 
   useEffect(() => {
     // Attempt WebSocket connection to Module 4 Safety WebSocket server
-    const token = localStorage.getItem('access_token');
+    const token = getAccessToken();
     const wsUrl = `ws://${window.location.hostname || 'localhost'}:4400/ws`;
 
     try {
