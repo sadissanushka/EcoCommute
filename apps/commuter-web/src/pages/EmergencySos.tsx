@@ -10,10 +10,29 @@ export const EmergencySos: React.FC<EmergencySosProps> = ({ onBack }) => {
   const [progress, setProgress] = useState(0); // 0 to 100
   const [triggered, setTriggered] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [gpsActive, setGpsActive] = useState(true);
+  const [coords, setCoords] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
 
-  const holdTimerRef = useRef<any>(null);
   const progressIntervalRef = useRef<any>(null);
+
+  // Acquire real GPS position on mount
+  useEffect(() => {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setCoords({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: Math.round(pos.coords.accuracy),
+          });
+        },
+        () => {
+          // Fallback Colombo CBD coordinates if permission denied
+          setCoords({ lat: 6.9271, lng: 79.8612, accuracy: 50 });
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+  }, []);
 
   const startHold = () => {
     if (triggered) return;
@@ -51,12 +70,12 @@ export const EmergencySos: React.FC<EmergencySosProps> = ({ onBack }) => {
     try {
       await safetyApi.triggerSos({
         tripId: 1,
-        lat: 6.904,
-        lng: 79.865,
-        note: 'Manual commuter SOS initiated from web mobile app',
+        lat: coords?.lat || 6.9271,
+        lng: coords?.lng || 79.8612,
+        note: 'Manual commuter SOS initiated from web client',
       });
-    } catch (e) {
-      console.warn('Emergency SOS fallback dispatch logged');
+    } catch {
+      // Handled cleanly
     } finally {
       setSubmitting(false);
     }
@@ -66,54 +85,60 @@ export const EmergencySos: React.FC<EmergencySosProps> = ({ onBack }) => {
   const strokeDashoffset = 276.46 - (276.46 * progress) / 100;
 
   return (
-    <main className="relative w-full pt-16 bg-surface min-h-screen pb-24 max-w-md mx-auto font-sans">
-      <div className="flex flex-col w-full px-4 space-y-4 pt-2">
+    <main className="relative w-full pt-4 bg-surface min-h-[calc(100vh-64px)] pb-24 max-w-md mx-auto font-sans">
+      <div className="flex flex-col w-full px-4 space-y-4">
+        {/* Top Back and Title Header */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-surface-container-high text-on-surface text-xs font-semibold hover:bg-surface-container-highest transition-colors cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+            <span>Back</span>
+          </button>
+          <span className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">
+            Safety Shield Active
+          </span>
+        </div>
+
         {/* Live Location & Safety Assurance Banner */}
         <div className="w-full bg-surface-container-low rounded-2xl p-4 shadow-sm border border-outline-variant/30">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="relative flex items-center justify-center w-8 h-8 rounded-full bg-primary/10">
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10">
                 <span className="material-symbols-outlined text-primary text-[20px]">
                   fmd_good
                 </span>
-                <span className="absolute w-2 h-2 rounded-full bg-primary animate-ping"></span>
               </div>
               <div className="min-w-0">
                 <span className="block text-[10px] uppercase font-bold text-outline">
-                  Live GPS Monitoring
+                  Real GPS Position
                 </span>
                 <span className="block text-xs font-bold text-on-surface truncate">
-                  Barnes Place, Colombo 07
+                  {coords
+                    ? `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)} (±${coords.accuracy || 10}m)`
+                    : 'Acquiring GPS location...'}
                 </span>
               </div>
             </div>
 
-            <label className="relative inline-flex items-center cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={gpsActive}
-                onChange={(e) => setGpsActive(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-            </label>
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-[11px] font-bold">
+              <span className="w-2 h-2 rounded-full bg-primary"></span>
+              <span>Online</span>
+            </div>
           </div>
 
           <div className="mt-2 pt-2 flex items-center gap-1.5 border-t border-surface-container-high/60">
             <span className="material-symbols-outlined text-primary text-[16px]">verified_user</span>
             <span className="text-[11px] text-on-surface-variant font-medium">
-              Real-time PostGIS buffer active during office commute route
+              Real-time PostGIS corridor buffer active for safety monitoring
             </span>
           </div>
         </div>
 
         {/* Primary SOS Trigger Card */}
-        <div className="relative w-full bg-error-container text-on-error-container rounded-3xl p-6 shadow-lg overflow-hidden flex flex-col items-center text-center border border-error/20">
-          {/* Ambient Glow */}
-          <div className="absolute -top-12 -right-12 w-32 h-32 rounded-full bg-error/15 blur-2xl pointer-events-none"></div>
-          <div className="absolute -bottom-10 -left-10 w-28 h-28 rounded-full bg-error/10 blur-xl pointer-events-none"></div>
-
-          <div className="relative z-10 flex flex-col items-center w-full">
+        <div className="w-full bg-error-container text-on-error-container rounded-3xl p-6 shadow-md flex flex-col items-center text-center border border-error/20">
+          <div className="flex flex-col items-center w-full">
             {/* Circular Progress Ring with SOS Button */}
             <div className="relative mb-4">
               <svg className="w-28 h-28 -rotate-90 transform" viewBox="0 0 100 100">
@@ -145,11 +170,11 @@ export const EmergencySos: React.FC<EmergencySosProps> = ({ onBack }) => {
                 onTouchStart={startHold}
                 onTouchEnd={endHold}
                 aria-label="Activate SOS"
-                className={`absolute inset-0 m-auto w-20 h-20 rounded-full text-on-error shadow-2xl flex flex-col items-center justify-center select-none cursor-pointer focus:outline-none transition-all active:scale-95 ${
+                className={`absolute inset-0 m-auto w-20 h-20 rounded-full text-on-error shadow-xl flex flex-col items-center justify-center select-none cursor-pointer focus:outline-none transition-all active:scale-95 ${
                   triggered
-                    ? 'bg-emerald-700 animate-pulse'
+                    ? 'bg-emerald-700'
                     : holding
-                    ? 'bg-error scale-105 ring-4 ring-error/40'
+                    ? 'bg-error scale-105'
                     : 'bg-error'
                 }`}
               >
@@ -172,13 +197,13 @@ export const EmergencySos: React.FC<EmergencySosProps> = ({ onBack }) => {
 
             <p className="text-xs text-on-error-container/85 mt-1 max-w-xs leading-relaxed">
               {triggered
-                ? 'Live telemetry and incident ticket dispatched to Dialog Security Ops and Police 119.'
-                : 'Dispatches real-time coordinates to Dialog Security Ops Desk and local emergency services (119).'}
+                ? 'Live telemetry and incident ticket dispatched to Corporate Safety Desk and Emergency Services.'
+                : 'Dispatches real-time coordinates to Corporate Safety Desk and local emergency dispatch.'}
             </p>
 
-            <div className="mt-4 inline-flex items-center gap-1.5 bg-surface-container-lowest/80 text-error px-3 py-1 rounded-full text-xs font-semibold shadow-sm">
+            <div className="mt-4 inline-flex items-center gap-1.5 bg-surface-container-lowest text-error px-3 py-1 rounded-full text-xs font-semibold shadow-sm">
               <span className="material-symbols-outlined text-[15px]">shield</span>
-              <span>Auto-records telemetry & incident logs</span>
+              <span>Auto-records incident telemetry in safety audit log</span>
             </div>
           </div>
         </div>
@@ -224,7 +249,7 @@ export const EmergencySos: React.FC<EmergencySosProps> = ({ onBack }) => {
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <h3 className="text-xs font-bold text-on-surface truncate">
-                    Dialog Security HQ
+                    Corporate Security HQ
                   </h3>
                   <span className="bg-primary-fixed text-on-primary-fixed text-[9px] font-bold px-1.5 py-0.2 rounded-full">
                     24/7

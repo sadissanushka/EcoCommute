@@ -37,7 +37,11 @@ export class RoomManager {
 
     try {
       const res = await pool.query(
-        'SELECT role FROM core.trip_participants WHERE trip_id = $1 AND user_id = $2',
+        `SELECT role FROM core.trip_participants WHERE trip_id = $1 AND user_id = $2
+         UNION
+         SELECT 'rider' AS role FROM booking.bookings WHERE trip_id = $1 AND user_id = $2 AND status != 'cancelled'
+         UNION
+         SELECT 'driver' AS role FROM core.trips WHERE id = $1 AND driver_user_id = $2`,
         [tripId, user.id]
       );
       if (res.rows.length > 0) {

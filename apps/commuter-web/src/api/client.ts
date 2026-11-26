@@ -79,9 +79,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!res.ok) {
     let message = data?.error?.message || data?.message;
 
-    // Extract validation details if available
-    if (data?.error?.details && typeof data.error.details === 'object') {
+    // Extract validation details if available (skip for locked accounts)
+    if (data?.error?.details && typeof data.error.details === 'object' && data?.error?.code !== 'ACCOUNT_LOCKED') {
       const fieldErrors = Object.entries(data.error.details)
+        .filter(([key]) => key !== 'lockedUntil')
         .map(([field, errs]) => {
           if (Array.isArray(errs)) {
             return `${errs.join(', ')}`;

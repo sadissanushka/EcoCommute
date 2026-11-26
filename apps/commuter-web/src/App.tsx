@@ -165,19 +165,24 @@ export const App: React.FC = () => {
   // Commuter Hub and Auxiliary Flows
   return (
     <div className="min-h-screen bg-surface flex flex-col font-sans">
-      {/* Header with Map Studio and User Logout */}
+      {/* Header with Screen Title and User Profile / Logout */}
       <header className="fixed top-0 w-full z-40 bg-surface/85 backdrop-blur-xl pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.04)] border-b border-surface-container-high/50">
         <div className="h-16 px-4 flex items-center justify-between max-w-lg mx-auto">
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setViewMode('map')}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary text-on-primary text-xs font-bold shadow-sm hover:bg-primary-container cursor-pointer transition-all"
-            >
-              <span className="material-symbols-outlined text-[18px]">
-                map
-              </span>
-              <span>Map Studio</span>
-            </button>
+            {viewMode !== 'home' ? (
+              <button
+                onClick={() => setViewMode('home')}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-colors cursor-pointer text-xs font-semibold"
+                title="Back to Hub"
+              >
+                <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                <span>Hub</span>
+              </button>
+            ) : (
+              <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                <span className="material-symbols-outlined text-[20px]">directions_bus</span>
+              </div>
+            )}
 
             <span className="font-bold text-base text-on-surface">
               {viewMode === 'booking'
@@ -258,14 +263,15 @@ export const App: React.FC = () => {
 
         {viewMode === 'tracking' && (
           <LiveTracking
-            tripId={1}
+            tripId={selectedTripId || undefined}
             onOpenSos={() => setViewMode('sos')}
-            onBack={() => setViewMode('map')}
+            onBack={() => setViewMode('home')}
+            onNavigateToBooking={() => setViewMode('booking')}
           />
         )}
 
         {viewMode === 'sos' && (
-          <EmergencySos onBack={() => setViewMode('map')} />
+          <EmergencySos onBack={() => setViewMode('home')} />
         )}
 
         {viewMode === 'rides' && <RideMatching user={currentUser} />}
@@ -308,13 +314,16 @@ export const App: React.FC = () => {
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-surface/90 backdrop-blur-xl border-t border-outline-variant/30 pb-safe shadow-[0_-2px_12px_rgba(0,0,0,0.05)]">
         <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-2">
           <button
-            onClick={() => setViewMode('map')}
-            className="flex-1 flex flex-col items-center justify-center py-1 transition-all text-on-surface-variant hover:text-primary"
+            onClick={() => setViewMode('home')}
+            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all ${viewMode === 'home'
+              ? 'text-primary font-bold'
+              : 'text-on-surface-variant'
+              }`}
           >
             <span className="material-symbols-outlined text-[22px]">
-              explore
+              grid_view
             </span>
-            <span className="text-[11px] mt-0.5">Map</span>
+            <span className="text-[11px] mt-0.5">Hub</span>
           </button>
 
           <button
@@ -328,19 +337,6 @@ export const App: React.FC = () => {
               commute
             </span>
             <span className="text-[11px] mt-0.5">Matches</span>
-          </button>
-
-          <button
-            onClick={() => setViewMode('home')}
-            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all ${viewMode === 'home'
-              ? 'text-primary font-bold'
-              : 'text-on-surface-variant'
-              }`}
-          >
-            <span className="material-symbols-outlined text-[22px]">
-              grid_view
-            </span>
-            <span className="text-[11px] mt-0.5">Hub</span>
           </button>
 
           <button
