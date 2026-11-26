@@ -655,6 +655,8 @@ async getTripDetails(tripId: number): Promise<ShuttleTrip> {
     success: boolean;
     bookingId: number;
     passengerName: string;
+    passengerEmail?: string;
+    company?: string;
     status: string;
     boardedAt?: string;
   }> {

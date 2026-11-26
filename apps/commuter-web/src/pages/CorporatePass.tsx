@@ -190,11 +190,21 @@ export const CorporatePass: React.FC<CorporatePassProps> = ({ user, onBack }) =>
             </div>
 
             {/* Live Dynamic Token Refresher */}
-            <div className="flex items-center gap-1.5 mt-2.5 text-xs text-on-surface-variant font-medium">
+            <div className="flex items-center gap-2 mt-2.5 text-xs text-on-surface-variant font-medium">
               <span className="material-symbols-outlined text-[15px] text-primary">sync</span>
               <span>Auto-refreshes in {secondsRemaining}s</span>
               <span className="text-outline-variant">•</span>
-              <span className="font-mono font-bold text-on-surface">{totpToken}</span>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(totpToken);
+                  alert(`Copied Passcode ${totpToken} to clipboard.`);
+                }}
+                className="font-mono font-bold text-on-surface px-2 py-0.5 rounded bg-surface-container-high hover:bg-surface-container-highest cursor-pointer flex items-center gap-1"
+                title="Click to copy passcode"
+              >
+                <span>{totpToken}</span>
+                <span className="material-symbols-outlined text-[13px] text-primary">content_copy</span>
+              </button>
             </div>
           </div>
 
