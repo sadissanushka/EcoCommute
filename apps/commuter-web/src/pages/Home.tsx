@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, getFriendlyFirstName, getAvatarInitials, MyBooking, ShuttleTrip } from '../types';
-import { bookingApi, walletApi } from '../api/client';
+import { bookingApi, safetyApi, walletApi } from '../api/client';
+import { SharedRouteMap, MapCoordinate } from '../components/SharedRouteMap';
 
 interface HomeProps {
   user: User | null;
@@ -23,11 +24,11 @@ export const Home: React.FC<HomeProps> = ({
 }) => {
   const firstName = getFriendlyFirstName(user?.fullName);
 
-  const [co2SavedKg, setCo2SavedKg] = useState<number>(12.4);
-  const [balanceLkr, setBalanceLkr] = useState<number>(428.5);
+  const [co2SavedKg, setCo2SavedKg] = useState<number>(0);
+  const [balanceLkr, setBalanceLkr] = useState<number>(0);
   const [upcomingBooking, setUpcomingBooking] = useState<MyBooking | null>(null);
   const [nextScheduledTrip, setNextScheduledTrip] = useState<ShuttleTrip | null>(null);
-  const [recentBookings, setRecentBookings] = useState<MyBooking[]>([]);
+  const [corridorPath, setCorridorPath] = useState<MapCoordinate[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -36,7 +37,7 @@ export const Home: React.FC<HomeProps> = ({
     async function loadHomeData() {
       try {
         const [walletData, bookings, trips] = await Promise.all([
-          walletApi.getBalance().catch(() => ({ balanceLkr: 428.5, co2SavedKg: 12.4 })),
+          walletApi.getBalance().catch(() => null),
           bookingApi.getMyBookings().catch(() => [] as MyBooking[]),
           bookingApi.getTrips().catch(() => [] as ShuttleTrip[]),
         ]);
@@ -44,27 +45,29 @@ export const Home: React.FC<HomeProps> = ({
         if (!isMounted) return;
 
         if (walletData) {
-          setBalanceLkr(walletData.balanceLkr ?? 428.5);
-          // If the user has confirmed bookings, dynamically add calculated savings to base
-          const bookingCount = bookings.filter((b) => b.status === 'confirmed').length;
-          const computedCo2 = Number((walletData.co2SavedKg + bookingCount * 2.1).toFixed(1));
-          setCo2SavedKg(computedCo2);
+          setBalanceLkr(walletData.balanceLkr ?? 0);
+          setCo2SavedKg(walletData.co2SavedKg ?? 0);
         }
 
+        let resolvedTripId = 1;
         if (bookings && bookings.length > 0) {
-          setRecentBookings(bookings.slice(0, 3));
           const active = bookings.find(
             (b) => b.status === 'confirmed' || b.status === 'boarded'
           );
-          if (active) {
-            setUpcomingBooking(active);
-          } else {
-            setUpcomingBooking(bookings[0]);
-          }
+          const chosen = active || bookings[0];
+          setUpcomingBooking(chosen);
+          resolvedTripId = chosen.tripId;
+        } else if (trips && trips.length > 0) {
+          resolvedTripId = trips[0].id;
         }
 
         if (trips && trips.length > 0) {
           setNextScheduledTrip(trips[0]);
+        }
+
+        const coords = await safetyApi.getCorridor(resolvedTripId).catch(() => []);
+        if (isMounted && Array.isArray(coords) && coords.length > 0) {
+          setCorridorPath(coords);
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -250,25 +253,38 @@ export const Home: React.FC<HomeProps> = ({
         </div>
       )}
 
-      {/* Live Map Preview Card */}
+      {/* Live Map Preview Card — Real PostGIS Corridor on Leaflet */}
       <section
         onClick={() => onNavigateToTracking(targetTripId)}
-        className="relative rounded-2xl overflow-hidden shadow-md h-36 border border-outline-variant/20 cursor-pointer group"
+        className="relative rounded-2xl overflow-hidden shadow-md border border-outline-variant/20 cursor-pointer group bg-surface-container-lowest"
       >
-        <div className="absolute inset-0 bg-[#eef3ee] flex items-center justify-center">
-          <svg className="w-full h-full object-cover" viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
-            <path d="M 0 100 Q 150 40 250 120 T 400 80" fill="none" stroke="#0d631b" strokeWidth="4" strokeDasharray="6 4" />
-            <circle cx="150" cy="70" r="8" fill="#0d631b" />
-            <circle cx="280" cy="110" r="6" fill="#005db7" />
-          </svg>
+        <div className="relative h-44 w-full pointer-events-none">
+          <SharedRouteMap
+            routePolyline={corridorPath}
+            markers={
+              corridorPath.length >= 2
+                ? [
+                    { lat: corridorPath[0].lat, lng: corridorPath[0].lng, label: originDisplay, color: '#15803d' },
+                    {
+                      lat: corridorPath[corridorPath.length - 1].lat,
+                      lng: corridorPath[corridorPath.length - 1].lng,
+                      label: destDisplay,
+                      color: '#005db7',
+                    },
+                  ]
+                : []
+            }
+            heightClass="h-44"
+          />
         </div>
-        <div className="absolute inset-0 bg-gradient-to-t from-surface-container-lowest via-transparent to-transparent"></div>
-        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">Active Telematics Stream</span>
-            <div className="text-xs font-bold text-on-surface">{routeNameDisplay}</div>
+        <div className="px-3.5 py-2.5 bg-surface-container-lowest border-t border-outline-variant/20 flex items-center justify-between">
+          <div className="min-w-0">
+            <span className="text-[10px] font-semibold text-primary uppercase tracking-wider block">
+              Active Telematics Stream
+            </span>
+            <div className="text-xs font-bold text-on-surface truncate">{routeNameDisplay}</div>
           </div>
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-secondary group-hover:underline">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-secondary group-hover:underline shrink-0 ml-2">
             View Live <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
           </span>
         </div>
