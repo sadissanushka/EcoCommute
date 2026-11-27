@@ -20,6 +20,7 @@ import { CommutePreferences } from './pages/CommutePreferences';
 import { ScanPassengerPass } from './pages/ScanPassengerPass';
 import { ActiveDriverNavigation } from './pages/ActiveDriverNavigation';
 import { PublishRideModal } from './pages/PublishRideModal';
+import { Settings } from './pages/Settings';
 
 import { User, getAvatarInitials } from './types';
 import {
@@ -48,6 +49,7 @@ export const App: React.FC = () => {
     | 'recent-rides'
     | 'pass'
     | 'preferences'
+    | 'settings'
     | 'login'
     | 'register'
   >(() => {
@@ -152,14 +154,14 @@ export const App: React.FC = () => {
           </button>
 
           <button
-            onClick={handleLogout}
-            title="Log Out"
-            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-surface-container-lowest/90 backdrop-blur-md text-error shadow-lg border border-error/20 text-xs font-bold hover:bg-error/10 active:scale-95 transition-all cursor-pointer"
+            onClick={() => setViewMode('settings')}
+            title="Settings"
+            aria-label="Settings"
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-surface-container-lowest/90 backdrop-blur-md text-on-surface shadow-lg border border-outline-variant/30 hover:bg-surface-container active:scale-95 transition-all cursor-pointer"
           >
-            <span className="material-symbols-outlined text-[16px]">
-              logout
+            <span className="material-symbols-outlined text-[20px]">
+              settings
             </span>
-            <span>Log Out</span>
           </button>
         </div>
 
@@ -213,30 +215,41 @@ export const App: React.FC = () => {
                                   ? 'My Bookings'
                                   : viewMode === 'pass'
                                     ? 'Corporate Pass'
-                                    : 'Home'}
+                                    : viewMode === 'settings'
+                                      ? 'Settings'
+                                      : viewMode === 'preferences'
+                                        ? 'Commute Preferences'
+                                        : 'Home'}
             </span>
           </div>
 
-          {/* Right Header: Profile Avatar and Logout Button */}
+          {/* Right Header: Profile Avatar and Settings Gear Button */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleLogout}
-              title="Log out of account"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-error hover:bg-error/10 hover:border-error/30 border border-error/20 text-xs font-bold transition-all cursor-pointer active:scale-95 shadow-sm"
-            >
-              <span className="material-symbols-outlined text-[17px]">
-                logout
-              </span>
-              <span>Log Out</span>
-            </button>
-
             {/* Profile Avatar Pill */}
-            <div
-              className="w-8 h-8 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs uppercase select-none"
+            <button
+              type="button"
+              onClick={() => setViewMode('settings')}
+              className="w-8 h-8 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs uppercase select-none cursor-pointer hover:bg-primary/20 transition-colors"
               title={currentUser?.fullName || 'User Profile'}
             >
               {getAvatarInitials(currentUser?.fullName)}
-            </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('settings')}
+              title="Settings"
+              aria-label="Open Settings"
+              className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
+                viewMode === 'settings' || viewMode === 'preferences'
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[22px]">
+                settings
+              </span>
+            </button>
           </div>
         </div>
       </header>
@@ -346,7 +359,23 @@ export const App: React.FC = () => {
         )}
 
         {viewMode === 'preferences' && (
-          <CommutePreferences onBack={() => setViewMode('home')} />
+          <CommutePreferences
+            user={currentUser}
+            onUserUpdated={(updated) => setCurrentUser(updated)}
+            onBack={() => setViewMode('settings')}
+          />
+        )}
+
+        {viewMode === 'settings' && (
+          <Settings
+            user={currentUser}
+            onUserUpdated={(updated) => setCurrentUser(updated)}
+            onLogout={handleLogout}
+            onNavigateToPreferences={() => setViewMode('preferences')}
+            onNavigateToPass={() => setViewMode('pass')}
+            onNavigateToWallet={() => setViewMode('wallet')}
+            onNavigateToSos={() => setViewMode('sos')}
+          />
         )}
       </div>
 

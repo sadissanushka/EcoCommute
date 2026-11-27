@@ -226,16 +226,63 @@ export const authApi = {
         id: Number(u.id),
         email: u.email,
         fullName: u.fullName || u.full_name,
+        phone: u.phone || undefined,
         companyId: Number(u.companyId ?? u.company_id ?? 1),
         companyName: u.companyName || u.company_name,
         role: u.role,
         verified: u.corporateVerified ?? u.corporate_verified ?? u.verified ?? true,
+        preferences: u.preferences_json || u.preferences || {},
       };
       sessionStorage.setItem('user_profile', JSON.stringify(user));
       localStorage.setItem('user_profile', JSON.stringify(user));
       return user;
     } catch {
       return cached;
+    }
+  },
+
+  async updateMe(payload: {
+    fullName?: string;
+    phone?: string | null;
+    preferences?: Record<string, any>;
+  }): Promise<User> {
+    const res = await request<any>('/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+    const u = res.user || res;
+    if (!u || !u.id) {
+      throw new Error('Failed to update profile.');
+    }
+    const user: User = {
+      id: Number(u.id),
+      email: u.email,
+      fullName: u.fullName || u.full_name,
+      phone: u.phone || undefined,
+      companyId: Number(u.companyId ?? u.company_id ?? 1),
+      companyName: u.companyName || u.company_name,
+      role: u.role,
+      verified: u.corporateVerified ?? u.corporate_verified ?? u.verified ?? true,
+      preferences: u.preferences_json || u.preferences || {},
+    };
+    sessionStorage.setItem('user_profile', JSON.stringify(user));
+    localStorage.setItem('user_profile', JSON.stringify(user));
+    return user;
+  },
+
+  async logout(): Promise<void> {
+    const refreshToken = sessionStorage.getItem('refresh_token') || localStorage.getItem('refresh_token');
+    try {
+      if (refreshToken) {
+        await request<any>('/auth/logout', {
+          method: 'POST',
+          body: JSON.stringify({ refreshToken }),
+        });
+      }
+    } catch {
+      // Proceed with local session teardown even if server revoke fails
+    } finally {
+      clearSession();
     }
   },
 };

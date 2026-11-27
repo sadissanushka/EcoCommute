@@ -1,3 +1,21 @@
+export interface UserPreferences {
+  workHub?: string;
+  emergencyContact?: string;
+  homeAddress?: string;
+  officeAddress?: string;
+  commuteDays?: string[];
+  morningTime?: string;
+  eveningTime?: string;
+  transitMode?: 'shuttle' | 'carpool' | 'multimodal';
+  proximityAlerts?: boolean;
+  notifications?: {
+    tripUpdates?: boolean;
+    passAlerts?: boolean;
+    ecoSummaries?: boolean;
+  };
+  language?: 'en' | 'si' | 'ta';
+}
+
 export interface User {
   id: number;
   email: string;
@@ -7,6 +25,7 @@ export interface User {
   companyName?: string;
   role: 'employee' | 'driver' | 'admin' | 'policymaker';
   verified?: boolean;
+  preferences?: UserPreferences;
 }
 
 export function getFriendlyFirstName(fullName?: string): string {

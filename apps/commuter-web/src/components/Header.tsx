@@ -6,7 +6,7 @@ interface HeaderProps {
   showBack?: boolean;
   onBack?: () => void;
   user?: User | null;
-  onLogout?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -14,7 +14,7 @@ export const Header: React.FC<HeaderProps> = ({
   showBack = false,
   onBack,
   user,
-  onLogout,
+  onOpenSettings,
 }) => {
   return (
     <header className="fixed top-0 w-full z-40 bg-surface/85 backdrop-blur-xl pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.04)] border-b border-surface-container-high/50">
@@ -48,13 +48,14 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="w-8 h-8 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs uppercase">
                 {user.fullName ? user.fullName.charAt(0) : 'U'}
               </div>
-              {onLogout && (
+              {onOpenSettings && (
                 <button
-                  onClick={onLogout}
-                  title="Sign out"
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:text-error transition-colors"
+                  onClick={onOpenSettings}
+                  title="Settings"
+                  aria-label="Open Settings"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[18px]">logout</span>
+                  <span className="material-symbols-outlined text-[20px]">settings</span>
                 </button>
               )}
             </div>

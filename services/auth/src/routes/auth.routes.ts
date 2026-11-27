@@ -413,7 +413,7 @@ authRouter.get('/me', requireAuth, async (req: Request, res: Response) => {
   try {
     const userRes = await pool.query(
       `SELECT u.id, u.company_id, c.name AS company_name, u.email, u.full_name,
-              u.role, u.gender, u.corporate_verified, u.created_at
+              u.phone, u.role, u.gender, u.corporate_verified, u.preferences_json, u.created_at
        FROM core.users u
        LEFT JOIN core.companies c ON c.id = u.company_id
        WHERE u.id = $1`,
@@ -437,6 +437,68 @@ authRouter.get('/me', requireAuth, async (req: Request, res: Response) => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Failed to fetch user profile',
+        details: { error: err.message },
+      },
+    });
+  }
+});
+
+const updateMeSchema = z.object({
+  fullName: z.string().min(2).max(120).optional(),
+  phone: z.string().max(40).nullable().optional(),
+  preferences: z.record(z.any()).optional(),
+});
+
+// PATCH /auth/me - Update authenticated user's profile and preferences
+authRouter.patch('/me', requireAuth, async (req: Request, res: Response) => {
+  const parseResult = updateMeSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid profile update payload',
+        details: parseResult.error.flatten().fieldErrors,
+      },
+    });
+    return;
+  }
+
+  const { fullName, phone, preferences } = parseResult.data;
+
+  try {
+    await pool.query(
+      `UPDATE core.users
+       SET full_name = COALESCE($1, full_name),
+           phone = COALESCE($2, phone),
+           preferences_json = CASE
+             WHEN $3::jsonb IS NOT NULL THEN COALESCE(preferences_json, '{}'::jsonb) || $3::jsonb
+             ELSE preferences_json
+           END,
+           updated_at = NOW()
+       WHERE id = $4`,
+      [
+        fullName ?? null,
+        phone !== undefined ? phone : null,
+        preferences ? JSON.stringify(preferences) : null,
+        req.user!.userId,
+      ]
+    );
+
+    const updatedRes = await pool.query(
+      `SELECT u.id, u.company_id, c.name AS company_name, u.email, u.full_name,
+              u.phone, u.role, u.gender, u.corporate_verified, u.preferences_json, u.created_at
+       FROM core.users u
+       LEFT JOIN core.companies c ON c.id = u.company_id
+       WHERE u.id = $1`,
+      [req.user!.userId]
+    );
+
+    res.status(200).json({ user: updatedRes.rows[0] });
+  } catch (err: any) {
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to update user profile',
         details: { error: err.message },
       },
     });
