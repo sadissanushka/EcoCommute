@@ -225,6 +225,14 @@ export function findOptimalSeatAllocation(
     }
 
     const chosenSeats = explicitSeatIds.map((id) => allMap.get(id)!);
+    if (requireAccessible && !chosenSeats.some((seat) => seat.is_accessible)) {
+      throw new SeatAllocationError(
+        'ACCESSIBLE_SEAT_REQUIRED',
+        'At least one selected seat must be accessible',
+        400,
+        { explicitSeatIds }
+      );
+    }
     return {
       seatIds: explicitSeatIds,
       seats: chosenSeats,
@@ -310,6 +318,9 @@ export function findOptimalSeatAllocation(
   // 2. Fallback: If no adjacent block is found, allocate individual seats deterministically
   // Sort available seats: prefer non-accessible for ordinary riders if available, row ASC, col ASC
   const fallbackCandidates = [...availableSeats].sort((a, b) => {
+    if (requireAccessible && a.is_accessible !== b.is_accessible) {
+      return a.is_accessible ? -1 : 1;
+    }
     if (a.row_no !== b.row_no) return a.row_no - b.row_no;
     return a.col_no - b.col_no;
   });

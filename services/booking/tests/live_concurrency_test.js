@@ -1,6 +1,6 @@
 const http = require('http');
 
-const BASE_URL = 'http://localhost:8080';
+const BASE_URL = process.env.API_BASE_URL || 'http://localhost:18080';
 
 function post(path, body, token, headers = {}) {
   return new Promise((resolve, reject) => {
@@ -103,17 +103,24 @@ async function run() {
 
   console.log('✅ Logged in emp1 and emp2');
 
-  // Check available trips
+  // Check available trips and seat
   const tripsRes = await get('/trips', token1);
   const trip = tripsRes.body.trips[0];
   const tripId = trip.id;
   console.log(`✅ Using Trip ID ${tripId} (${trip.routeName})`);
 
+  const tripDetailRes = await get(`/trips/${tripId}`, token1);
+  const availableSeat = tripDetailRes.body.trip.seats.find((s) => s.isAvailable);
+  if (!availableSeat) {
+    throw new Error('No available seats found on trip to test concurrency');
+  }
+  const testSeatId = Number(availableSeat.id);
+
   // 2. Concurrency Test: Two employees attempt to hold the SAME seat at the exact same moment
-  console.log('⚡ Concurrency Test: Simultaneous seat hold contention on seat 31...');
+  console.log(`⚡ Concurrency Test: Simultaneous seat hold contention on seat ${testSeatId} (${availableSeat.label})...`);
   const [hold1, hold2] = await Promise.all([
-    post(`/trips/${tripId}/holds`, { partySize: 1, seatIds: [31] }, token1),
-    post(`/trips/${tripId}/holds`, { partySize: 1, seatIds: [31] }, token2),
+    post(`/trips/${tripId}/holds`, { partySize: 1, seatIds: [testSeatId] }, token1),
+    post(`/trips/${tripId}/holds`, { partySize: 1, seatIds: [testSeatId] }, token2),
   ]);
 
   const holdSuccessCount = [hold1, hold2].filter((r) => r.status === 201).length;

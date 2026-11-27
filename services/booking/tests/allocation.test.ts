@@ -85,6 +85,23 @@ describe('M2-04: Intelligent Seat Allocation Service Tests', () => {
     expect(result.seats.map((s) => s.seat_label)).toEqual(['1C', '2C']);
   });
 
+  test('Fallback allocation includes an accessible seat when accessibility is required', () => {
+    const allSeats = createSeats();
+    const availableSeats = allSeats.filter((s) => ['1A', '1C', '2C'].includes(s.seat_label));
+
+    const result = findOptimalSeatAllocation(allSeats, availableSeats, layout, 2, undefined, true);
+
+    expect(result.allocationType).toBe('fallback');
+    expect(result.seats.some((seat) => seat.is_accessible)).toBe(true);
+  });
+
+  test('Rejects explicit seat selection without an accessible seat when required', () => {
+    const allSeats = createSeats();
+
+    expect(() => findOptimalSeatAllocation(allSeats, allSeats, layout, 1, [2], true))
+      .toThrow('At least one selected seat must be accessible');
+  });
+
   test('Throws INSUFFICIENT_CAPACITY when available seats < partySize', () => {
     const allSeats = createSeats();
     const availableSeats = [allSeats[0]]; // Only 1 seat free

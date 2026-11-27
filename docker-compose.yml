@@ -256,7 +256,7 @@ services:
       gateway:
         condition: service_started
     ports:
-      - "5173:80"
+      - "15173:80"
 
   tileserver:
     image: maptiler/tileserver-gl:latest

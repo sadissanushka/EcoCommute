@@ -14,18 +14,18 @@ export const bookingRouter = Router();
 const HOLD_DURATION_MINUTES = parseInt(process.env.HOLD_DURATION_MINUTES || '5', 10);
 
 const bookingSchema = z.object({
-  partySize: z.number().int().min(1, 'Party size must be at least 1').max(6, 'Party size cannot exceed 6'),
-  seatIds: z.array(z.number().int().positive()).optional(),
+  partySize: z.coerce.number().int().min(1, 'Party size must be at least 1').max(6, 'Party size cannot exceed 6'),
+  seatIds: z.array(z.coerce.number().int().positive()).optional(),
   requireAccessible: z.boolean().optional(),
 });
 
 const waitlistSchema = z.object({
-  partySize: z.number().int().min(1, 'Party size must be at least 1').max(6, 'Party size cannot exceed 6').default(1),
+  partySize: z.coerce.number().int().min(1, 'Party size must be at least 1').max(6, 'Party size cannot exceed 6').default(1),
 });
 
 const holdSchema = z.object({
-  partySize: z.number().int().min(1, 'Party size must be at least 1').max(6, 'Party size cannot exceed 6'),
-  seatIds: z.array(z.number().int().positive()).optional(),
+  partySize: z.coerce.number().int().min(1, 'Party size must be at least 1').max(6, 'Party size cannot exceed 6'),
+  seatIds: z.array(z.coerce.number().int().positive()).optional(),
   requireAccessible: z.boolean().optional(),
 });
 
@@ -71,7 +71,7 @@ const updateTripSchema = z.object({
 bookingRouter.get('/trips', async (req: Request, res: Response) => {
   try {
     const { origin, destination, date, seatsNeeded } = req.query;
-    const minSeats = seatsNeeded ? parseInt(seatsNeeded as string, 10) : 1;
+    const minSeats = seatsNeeded ? parseInt(seatsNeeded as string, 10) : 0;
 
     // Clean up stale holds before reading availability
     await expireStaleHolds(pool as any);
@@ -244,7 +244,7 @@ bookingRouter.get('/trips/:id', async (req: Request, res: Response) => {
         driverName: trip.driver_name,
         availableSeats: availableCount,
         seats: seatsRes.rows.map((s) => ({
-          id: s.id,
+          id: typeof s.id === 'string' ? parseInt(s.id, 10) : s.id,
           label: s.seat_label,
           row: s.row_no,
           col: s.col_no,
