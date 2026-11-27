@@ -45,22 +45,12 @@ export const CorporatePass: React.FC<CorporatePassProps> = ({ user, onBack }) =>
 
   return (
     <main className="flex flex-col relative w-full min-h-[calc(100vh-64px)] bg-surface font-sans max-w-md mx-auto pb-24">
-      {/* Top Header */}
+      {/* Top Status Strip */}
       <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-surface-container-high/60">
-        <div className="flex items-center gap-2">
-          {onBack && (
-            <button
-              onClick={onBack}
-              className="w-9 h-9 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center hover:bg-surface-container-highest transition-colors cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-            </button>
-          )}
-          <h1 className="text-base font-bold text-on-surface">Corporate Pass</h1>
-        </div>
+        <h1 className="text-base font-bold text-on-surface">Corporate Pass</h1>
 
         <div className="flex items-center gap-1.5 text-xs text-primary font-semibold">
-          <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+          <span className="w-2 h-2 rounded-full bg-primary" />
           <span>Active Pass • Unlimited</span>
         </div>
       </div>

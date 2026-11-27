@@ -56,15 +56,9 @@ export const StartRide: React.FC<StartRideProps> = ({
 
   return (
     <div className="max-w-md mx-auto px-4 pb-24 font-sans text-on-surface">
-      {/* Header */}
-      <div className="flex items-center justify-between py-3 border-b border-surface-container-high/60">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-surface-container-high text-xs font-semibold hover:bg-surface-container-highest transition-colors cursor-pointer"
-        >
-          <span className="material-symbols-outlined text-[16px]">arrow_back</span>
-          <span>Dashboard</span>
-        </button>
+      {/* Status Strip */}
+      <div className="flex items-center justify-between py-2.5 border-b border-surface-container-high/60">
+        <span className="text-xs font-semibold text-on-surface-variant">Active Trip Check-In</span>
         <span className="text-[11px] bg-primary/10 text-primary border border-primary/20 px-2.5 py-1 rounded-full font-bold">
           Shield Active
         </span>

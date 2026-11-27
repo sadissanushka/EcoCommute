@@ -331,15 +331,6 @@ export const SeatSelection: React.FC<SeatSelectionProps> = ({
       <div className="px-4 pt-2 pb-3">
         <div className="bg-surface-container-low rounded-2xl p-3.5 flex items-center justify-between shadow-sm border border-outline-variant/30">
           <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={onBack}
-              className="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center cursor-pointer hover:bg-surface-container-highest"
-              aria-label="Back to trip search"
-            >
-              <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-            </button>
-
             <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-on-primary">
               <span className="material-symbols-outlined text-[20px]">event_seat</span>
             </div>

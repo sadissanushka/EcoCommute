@@ -267,20 +267,9 @@ export const ScanPassengerPass: React.FC<ScanPassengerPassProps> = ({
 
   return (
     <div className="flex flex-col relative w-full min-h-[calc(100vh-64px)] bg-surface font-sans max-w-md mx-auto pb-24">
-      {/* Top Header */}
-      <div className="h-14 px-4 flex items-center justify-between border-b border-surface-container-high/60">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              stopCamera();
-              onBack();
-            }}
-            className="w-9 h-9 flex items-center justify-center rounded-full text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-          </button>
-          <h1 className="text-sm font-bold text-on-surface">Scan Passenger Pass</h1>
-        </div>
+      {/* Scanner Toolbar */}
+      <div className="h-12 px-4 flex items-center justify-between border-b border-surface-container-high/60">
+        <h1 className="text-sm font-bold text-on-surface">Optical Pass Scanner</h1>
 
         <div className="flex items-center gap-2">
           {cameraActive && (

@@ -134,20 +134,9 @@ export const MyBookings: React.FC<MyBookingsProps> = ({ user, onBack, onNavigate
   return (
     <main className="min-h-screen bg-surface px-4 pt-5 pb-28 max-w-lg mx-auto font-sans">
       {/* Page Header */}
-      <div className="flex items-center gap-3 mb-5">
-        <button
-          type="button"
-          onClick={onBack}
-          className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center cursor-pointer hover:bg-surface-container-highest transition-all"
-          aria-label="Back to Hub"
-        >
-          <span className="material-symbols-outlined">arrow_back</span>
-        </button>
-
-        <div>
-          <h1 className="text-xl font-bold text-on-surface">My Bookings & Waitlists</h1>
-          <p className="text-xs text-outline">Manage your shuttle reservations and queue positions</p>
-        </div>
+      <div className="mb-5">
+        <h1 className="text-xl font-bold text-on-surface">My Bookings & Waitlists</h1>
+        <p className="text-xs text-outline">Manage your shuttle reservations and queue positions</p>
       </div>
 
       {/* Account Ownership Banner */}

@@ -59,6 +59,27 @@ export const App: React.FC = () => {
   const [selectedTripId, setSelectedTripId] = useState<number>(1);
   const [selectedPartySize, setSelectedPartySize] = useState<number>(1);
   const [showPublishModal, setShowPublishModal] = useState<boolean>(false);
+  const [settingsSubView, setSettingsSubView] = useState<'main' | 'personal-info'>('main');
+
+  const handleHeaderBack = () => {
+    if (viewMode === 'settings' && settingsSubView === 'personal-info') {
+      setSettingsSubView('main');
+      return;
+    }
+    if (viewMode === 'preferences') {
+      setViewMode('settings');
+      return;
+    }
+    if (viewMode === 'start-ride' || viewMode === 'scan-pass' || viewMode === 'driver-nav') {
+      setViewMode('driver');
+      return;
+    }
+    if (viewMode === 'seats') {
+      setViewMode('booking');
+      return;
+    }
+    setViewMode('home');
+  };
 
   const [registrationNotice, setRegistrationNotice] = useState<{
     email: string;
@@ -179,12 +200,12 @@ export const App: React.FC = () => {
           <div className="flex items-center gap-2">
             {viewMode !== 'home' ? (
               <button
-                onClick={() => setViewMode('home')}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-colors cursor-pointer text-xs font-semibold"
-                title="Back to Hub"
+                onClick={handleHeaderBack}
+                className="w-9 h-9 -ml-1 flex items-center justify-center rounded-full text-on-surface hover:bg-surface-container-high active:bg-surface-container-highest transition-colors cursor-pointer"
+                title="Go back"
+                aria-label="Go back"
               >
-                <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-                <span>Hub</span>
+                <span className="material-symbols-outlined text-[22px]">arrow_back</span>
               </button>
             ) : (
               <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
@@ -216,7 +237,9 @@ export const App: React.FC = () => {
                                   : viewMode === 'pass'
                                     ? 'Corporate Pass'
                                     : viewMode === 'settings'
-                                      ? 'Settings'
+                                      ? settingsSubView === 'personal-info'
+                                        ? 'Personal Info'
+                                        : 'Settings'
                                       : viewMode === 'preferences'
                                         ? 'Commute Preferences'
                                         : 'Home'}
@@ -369,6 +392,8 @@ export const App: React.FC = () => {
         {viewMode === 'settings' && (
           <Settings
             user={currentUser}
+            subView={settingsSubView}
+            onChangeSubView={setSettingsSubView}
             onUserUpdated={(updated) => setCurrentUser(updated)}
             onLogout={handleLogout}
             onNavigateToPreferences={() => setViewMode('preferences')}

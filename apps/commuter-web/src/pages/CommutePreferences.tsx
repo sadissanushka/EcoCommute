@@ -96,23 +96,6 @@ export const CommutePreferences: React.FC<CommutePreferencesProps> = ({
 
   return (
     <div className="max-w-lg mx-auto w-full px-4 py-3 pb-24 space-y-4 font-sans text-on-surface">
-      {/* Sub-Header */}
-      {onBack && (
-        <div className="flex items-center justify-between">
-          <button
-            type="button"
-            onClick={onBack}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-container-high text-xs font-semibold text-on-surface hover:bg-surface-container-highest transition-colors cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-            <span>Settings</span>
-          </button>
-          <span className="text-xs font-medium text-on-surface-variant">
-            {selectedDays.length} days selected
-          </span>
-        </div>
-      )}
-
       {/* Card 1: Daily Route & Locations */}
       <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm border border-outline-variant/25 flex flex-col gap-3">
         <div className="flex items-center justify-between">

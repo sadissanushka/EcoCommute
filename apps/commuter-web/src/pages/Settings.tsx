@@ -4,6 +4,8 @@ import { authApi, bookingApi, walletApi } from '../api/client';
 
 interface SettingsProps {
   user: User | null;
+  subView?: 'main' | 'personal-info';
+  onChangeSubView?: (view: 'main' | 'personal-info') => void;
   onUserUpdated: (user: User) => void;
   onLogout: () => void;
   onNavigateToPreferences: () => void;
@@ -20,6 +22,8 @@ const LANGUAGE_LABELS: Record<string, string> = {
 
 export const Settings: React.FC<SettingsProps> = ({
   user,
+  subView: controlledSubView,
+  onChangeSubView,
   onUserUpdated,
   onLogout,
   onNavigateToPreferences,
@@ -27,7 +31,9 @@ export const Settings: React.FC<SettingsProps> = ({
   onNavigateToWallet,
   onNavigateToSos,
 }) => {
-  const [subView, setSubView] = useState<'main' | 'personal-info'>('main');
+  const [internalSubView, setInternalSubView] = useState<'main' | 'personal-info'>('main');
+  const subView = controlledSubView ?? internalSubView;
+  const setSubView = onChangeSubView ?? setInternalSubView;
   const [co2SavedKg, setCo2SavedKg] = useState<number>(0);
   const [ridesCount, setRidesCount] = useState<number>(0);
 
@@ -183,23 +189,6 @@ export const Settings: React.FC<SettingsProps> = ({
   if (subView === 'personal-info') {
     return (
       <main className="flex flex-col w-full max-w-lg mx-auto px-4 pb-24 pt-2 font-sans text-on-surface">
-        {/* Sub-view Navigation Bar */}
-        <div className="flex items-center justify-between py-2 mb-2">
-          <button
-            type="button"
-            onClick={() => {
-              setIsEditingProfile(false);
-              setSubView('main');
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-container-high text-on-surface text-xs font-semibold hover:bg-surface-container-highest transition-colors cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-            <span>Settings</span>
-          </button>
-          <span className="text-sm font-bold text-on-surface">Personal Info</span>
-          <div className="w-16" />
-        </div>
-
         {/* Identity Summary */}
         <div className="flex flex-col items-center text-center pt-2">
           <div className="relative mb-3">

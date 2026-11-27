@@ -45,21 +45,11 @@ export const RecentRides: React.FC<RecentRidesProps> = ({ onBack }) => {
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-on-surface dark:text-white">Recent Rides & Commutes</h1>
-          <p className="text-xs text-on-surface-variant dark:text-outline-variant mt-0.5">
-            Your verified corporate commute history & carbon emission abatement log.
-          </p>
-        </div>
-        {onBack && (
-          <button
-            onClick={onBack}
-            className="px-3.5 py-1.5 rounded-xl bg-surface-container-low dark:bg-surface-container border border-outline-variant/30 text-xs font-semibold text-on-surface dark:text-white"
-          >
-            ← Back
-          </button>
-        )}
+      <div>
+        <h1 className="text-2xl font-bold text-on-surface dark:text-white">Recent Rides & Commutes</h1>
+        <p className="text-xs text-on-surface-variant dark:text-outline-variant mt-0.5">
+          Your verified corporate commute history & carbon emission abatement log.
+        </p>
       </div>
 
       {/* ESG Lifetime Impact Summary Card */}

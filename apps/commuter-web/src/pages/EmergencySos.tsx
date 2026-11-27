@@ -87,15 +87,8 @@ export const EmergencySos: React.FC<EmergencySosProps> = ({ onBack }) => {
   return (
     <main className="relative w-full pt-4 bg-surface min-h-[calc(100vh-64px)] pb-24 max-w-md mx-auto font-sans">
       <div className="flex flex-col w-full px-4 space-y-4">
-        {/* Top Back and Title Header */}
-        <div className="flex items-center justify-between">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-surface-container-high text-on-surface text-xs font-semibold hover:bg-surface-container-highest transition-colors cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-            <span>Back</span>
-          </button>
+        {/* Top Safety Status */}
+        <div className="flex items-center justify-end">
           <span className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">
             Safety Shield Active
           </span>
