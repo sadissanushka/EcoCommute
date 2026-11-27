@@ -5,18 +5,26 @@
 @tailwind utilities;
 
 @layer base {
-  html, body {
-    width: 100vw;
+  html {
+    width: 100%;
     margin: 0;
     padding: 0;
-    overflow-x: hidden;
+    overflow-x: clip;
+    overflow-y: auto;
     background-color: #fbf9f8;
     color: #1b1c1c;
     font-family: 'Inter', sans-serif;
   }
 
   body {
-    overscroll-behavior: none;
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow-x: clip;
+    background-color: #fbf9f8;
+    color: #1b1c1c;
+    font-family: 'Inter', sans-serif;
   }
 
   .pb-safe {
@@ -29,7 +37,13 @@
 }
 
 ::-webkit-scrollbar {
-  display: none;
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(112, 122, 108, 0.3);
+  border-radius: 9999px;
 }
 
 .material-symbols-outlined {

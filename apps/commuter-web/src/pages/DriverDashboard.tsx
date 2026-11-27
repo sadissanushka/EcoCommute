@@ -15,7 +15,8 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
   onScanPassClick,
   onNavigationClick,
 }) => {
-  const [reimbursementLkr, setReimbursementLkr] = useState<number>(14850.0);
+  const [reimbursementLkr, setReimbursementLkr] = useState<number>(0);
+  const [co2SavedKg, setCo2SavedKg] = useState<number>(0);
   const [trips, setTrips] = useState<ShuttleTrip[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -32,6 +33,7 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
         if (wallet) {
           setReimbursementLkr(wallet.balanceLkr || 0.0);
+          setCo2SavedKg(wallet.co2SavedKg || 0.0);
         }
 
         if (availableTrips && availableTrips.length > 0) {
@@ -49,7 +51,7 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
   }, []);
 
   return (
-    <div className="flex flex-col w-full max-w-md mx-auto px-4 pb-24 font-sans text-on-surface">
+    <div className="flex flex-col w-full max-w-md mx-auto px-4 pb-28 font-sans text-on-surface">
       {/* Header Stats Section */}
       <div className="py-3">
         <div className="flex items-center justify-between mb-3">
@@ -68,8 +70,8 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
             <p className="text-xs uppercase font-semibold opacity-90 mb-1">Monthly Fuel Reimbursements</p>
             <h2 className="text-3xl font-bold tracking-tight mb-3">LKR {reimbursementLkr.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
             <div className="flex items-center gap-2">
-              <span className="bg-white/20 px-3 py-1 rounded-full text-xs font-semibold">12 Rides Shared</span>
-              <span className="bg-white/20 px-3 py-1 rounded-full text-xs font-semibold">85kg CO₂ Saved</span>
+              <span className="bg-white/20 px-3 py-1 rounded-full text-xs font-semibold">{trips.length} Active Routes</span>
+              <span className="bg-white/20 px-3 py-1 rounded-full text-xs font-semibold">{co2SavedKg.toFixed(1)}kg CO₂ Saved</span>
             </div>
           </div>
           <svg className="absolute -right-4 -bottom-4 w-40 h-40 opacity-15 text-white pointer-events-none" fill="currentColor" viewBox="0 0 200 200">
