@@ -766,34 +766,165 @@ export const routingApi = {
 };
 
 // 4. Wallet & Carbon Emission API
+const REASON_LABELS: Record<string, string> = {
+  topup: 'Wallet Top-up (Corporate Subsidy)',
+  trip_share: 'Carpool Trip Fair-Share Settlement',
+  fuel_reimbursement: 'Eco Fuel Reimbursement',
+  adjustment: 'Corporate Ledger Adjustment',
+};
+
+const DEFAULT_KM_PER_LITRE: Record<string, number> = {
+  ELECTRIC: 18,
+  HYBRID: 22,
+  PETROL_92: 12,
+  AUTO_DIESEL: 14,
+};
+
+const DEFAULT_PRICE_MINOR: Record<string, number> = {
+  ELECTRIC: 8000,
+  HYBRID: 33200,
+  PETROL_92: 33200,
+  AUTO_DIESEL: 30700,
+};
+
 export const walletApi = {
   async getBalance(): Promise<WalletBalance> {
     try {
       const res = await request<any>('/wallet/balance');
-      const balanceMinor = res.data?.balanceMinor ?? 0;
+      const balanceMinor = Number(res.data?.balanceMinor ?? 0);
+      const balanceLkr =
+        res.data?.balanceLkr !== undefined
+          ? Number(res.data.balanceLkr)
+          : balanceMinor / 100;
       return {
-        balanceLkr: balanceMinor / 100,
+        balanceLkr,
         balanceMinor,
         currency: res.data?.currency || 'LKR',
-        co2SavedKg: res.data?.co2SavedKg ?? 0.0,
+        co2SavedKg: Number(res.data?.co2SavedKg ?? 0),
         corporateCardLast4: res.data?.corporateCardLast4 || '8882',
       };
     } catch {
       return {
-        balanceLkr: 0.0,
+        balanceLkr: 0,
         balanceMinor: 0,
         currency: 'LKR',
-        co2SavedKg: 0.0,
+        co2SavedKg: 0,
         corporateCardLast4: '8882',
       };
     }
   },
 
-  async calculateCarbon(params: { distanceKm: number; fuelType: string; passengers: number }) {
-    return await request<any>('/carbon/calculate', {
+  async topup(amountLkr: number): Promise<{
+    txnId: string;
+    balanceLkr: number;
+    balanceMinor: number;
+  }> {
+    const amountMinor = Math.round(Number(amountLkr) * 100);
+    if (!Number.isInteger(amountMinor) || amountMinor <= 0) {
+      throw new Error('Top-up amount must be greater than LKR 0.');
+    }
+    const idempotencyKey = `topup-${Date.now()}-${
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : Math.floor(Date.now() % 1000000).toString()
+    }`;
+    const res = await request<any>('/wallet/topup', {
       method: 'POST',
-      body: JSON.stringify(params),
+      body: JSON.stringify({ amountMinor, idempotencyKey }),
     });
+    const acc = res.data?.account || {};
+    const nextMinor = Number(acc.balanceMinor ?? 0);
+    return {
+      txnId: res.data?.txnId || '',
+      balanceMinor: nextMinor,
+      balanceLkr: acc.balanceLkr !== undefined ? Number(acc.balanceLkr) : nextMinor / 100,
+    };
+  },
+
+  async getFuelPrices(): Promise<Record<string, number>> {
+    try {
+      const res = await request<any>('/carbon/prices');
+      const map: Record<string, number> = { ...DEFAULT_PRICE_MINOR };
+      if (Array.isArray(res.data)) {
+        for (const item of res.data) {
+          if (item.fuelCode && item.priceMinorPerLitre !== undefined) {
+            map[item.fuelCode] = Number(item.priceMinorPerLitre);
+          }
+        }
+      }
+      return map;
+    } catch {
+      return { ...DEFAULT_PRICE_MINOR };
+    }
+  },
+
+  async calculateCarbon(params: {
+    distanceKm: number;
+    fuelType: 'PETROL_92' | 'AUTO_DIESEL' | 'HYBRID' | 'ELECTRIC' | string;
+    passengers: number;
+    priceMinorPerLitre?: number;
+  }): Promise<{
+    data: {
+      fuelCostLkr: number;
+      co2EmittedKg: number;
+      co2AvoidedKg: number;
+      reductionPct: number;
+      factorSource?: string;
+    };
+  }> {
+    const fuelTypeCode = (
+      ['PETROL_92', 'AUTO_DIESEL', 'HYBRID', 'ELECTRIC'].includes(params.fuelType)
+        ? params.fuelType
+        : 'ELECTRIC'
+    ) as 'PETROL_92' | 'AUTO_DIESEL' | 'HYBRID' | 'ELECTRIC';
+
+    const kmPerLitre = DEFAULT_KM_PER_LITRE[fuelTypeCode] || 15;
+    const priceMinorPerLitre =
+      params.priceMinorPerLitre ?? DEFAULT_PRICE_MINOR[fuelTypeCode] ?? 33200;
+    const passengerCount = Math.max(0, Number(params.passengers) - 1);
+
+    const [calcRes, avoidedRes] = await Promise.all([
+      request<any>('/carbon/calculate', {
+        method: 'POST',
+        body: JSON.stringify({
+          distanceKm: Number(params.distanceKm),
+          kmPerLitre,
+          fuelTypeCode,
+          priceMinorPerLitre,
+        }),
+      }),
+      request<any>('/carbon/avoided', {
+        method: 'POST',
+        body: JSON.stringify({
+          actualTrip: {
+            distanceKm: Number(params.distanceKm),
+            kmPerLitre,
+            fuelTypeCode,
+            passengerCount,
+          },
+          driverSoloDistanceKm: Number(params.distanceKm),
+          passengers: Array.from({ length: passengerCount }, (_, i) => ({
+            userId: i + 1,
+            soloDistanceKm: Number(params.distanceKm),
+          })),
+        }),
+      }),
+    ]);
+
+    return {
+      data: {
+        fuelCostLkr: Number(calcRes.data?.fuelCostLkr ?? 0),
+        co2EmittedKg: Number(calcRes.data?.co2EmittedKg ?? 0),
+        co2AvoidedKg: Number(
+          avoidedRes.data?.co2AvoidedKg ??
+            avoidedRes.data?.avoidedKg ??
+            avoidedRes.data?.netAvoidedKg ??
+            0
+        ),
+        reductionPct: Number(avoidedRes.data?.reductionPct ?? 0),
+        factorSource: calcRes.data?.factorSource,
+      },
+    };
   },
 
   async calculateFairSplit(params: {
@@ -810,7 +941,36 @@ export const walletApi = {
   async getTransactions(): Promise<Transaction[]> {
     try {
       const res = await request<any>('/wallet/transactions');
-      return res.data?.entries || [];
+      const entries = Array.isArray(res.data?.entries) ? res.data.entries : [];
+      return entries.map((entry: any) => {
+        const direction = String(entry.direction || 'DEBIT').toUpperCase();
+        const amountMinor = Number(entry.amountMinor ?? entry.amount_minor ?? 0);
+        const reason = String(entry.reason || 'adjustment');
+        const createdAt = entry.createdAt || entry.created_at;
+        let formattedDate = '';
+        if (createdAt) {
+          try {
+            formattedDate = new Date(createdAt).toLocaleString([], {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+          } catch {
+            formattedDate = String(createdAt);
+          }
+        }
+        return {
+          id: Number(entry.id),
+          type: direction === 'CREDIT' ? 'credit' : 'debit',
+          amount: amountMinor / 100,
+          description:
+            REASON_LABELS[reason] ||
+            (entry.tripId ? `Trip #${entry.tripId} Settlement` : reason),
+          timestamp: formattedDate,
+        };
+      });
     } catch {
       return [];
     }

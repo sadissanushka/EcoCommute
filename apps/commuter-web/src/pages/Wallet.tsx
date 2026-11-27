@@ -4,17 +4,23 @@ import { WalletBalance, Transaction } from '../types';
 
 export const Wallet: React.FC = () => {
   const [balance, setBalance] = useState<WalletBalance>({
-    balanceLkr: 428.50,
-    balanceMinor: 42850,
+    balanceLkr: 0,
+    balanceMinor: 0,
     currency: 'LKR',
-    co2SavedKg: 12.4,
+    co2SavedKg: 0,
     corporateCardLast4: '8882',
   });
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loadingWallet, setLoadingWallet] = useState(true);
   const [showAddFundsModal, setShowAddFundsModal] = useState(false);
   const [addAmount, setAddAmount] = useState(1000);
   const [addingFunds, setAddingFunds] = useState(false);
+  const [walletError, setWalletError] = useState<string | null>(null);
+  const [walletNotice, setWalletNotice] = useState<string | null>(null);
+
+  // Live CPC/CEB fuel prices from wallet-service
+  const [fuelPrices, setFuelPrices] = useState<Record<string, number>>({});
 
   // Carbon & Fair Split Calculator State (Module 3 real calculation)
   const [calcDistance, setCalcDistance] = useState(18);
@@ -24,54 +30,92 @@ export const Wallet: React.FC = () => {
     co2AvoidedKg: number;
     fuelCostLkr: number;
   }>({
-    co2AvoidedKg: 2.85,
-    fuelCostLkr: 513.0,
+    co2AvoidedKg: 0,
+    fuelCostLkr: 0,
   });
 
+  const refreshWallet = async () => {
+    try {
+      setLoadingWallet(true);
+      const [bal, txs, prices] = await Promise.all([
+        walletApi.getBalance(),
+        walletApi.getTransactions(),
+        walletApi.getFuelPrices(),
+      ]);
+      setBalance(bal);
+      setTransactions(txs);
+      setFuelPrices(prices);
+    } catch (err: any) {
+      setWalletError(err.message || 'Failed to load wallet ledger.');
+    } finally {
+      setLoadingWallet(false);
+    }
+  };
+
   useEffect(() => {
-    walletApi.getBalance().then(setBalance);
-    walletApi.getTransactions().then(setTransactions);
+    refreshWallet();
   }, []);
 
   useEffect(() => {
+    let active = true;
     walletApi
       .calculateCarbon({
         distanceKm: calcDistance,
         fuelType: calcFuelType,
         passengers: calcPassengers,
+        priceMinorPerLitre: fuelPrices[calcFuelType],
       })
       .then((res) => {
+        if (!active) return;
         setCarbonResult({
-          co2AvoidedKg: res.data?.co2AvoidedKg || 2.85,
-          fuelCostLkr: res.data?.fuelCostLkr || 513.0,
+          co2AvoidedKg: res.data.co2AvoidedKg,
+          fuelCostLkr: res.data.fuelCostLkr,
         });
+      })
+      .catch((err) => {
+        console.warn('Carbon calculation failed:', err);
       });
-  }, [calcDistance, calcFuelType, calcPassengers]);
+    return () => {
+      active = false;
+    };
+  }, [calcDistance, calcFuelType, calcPassengers, fuelPrices]);
 
-  const handleAddFunds = () => {
-    setAddingFunds(true);
-    setTimeout(() => {
+  const handleAddFunds = async () => {
+    try {
+      setAddingFunds(true);
+      setWalletError(null);
+      const result = await walletApi.topup(addAmount);
       setBalance((prev) => ({
         ...prev,
-        balanceLkr: prev.balanceLkr + addAmount,
+        balanceLkr: result.balanceLkr,
+        balanceMinor: result.balanceMinor,
       }));
-      setTransactions((prev) => [
-        {
-          id: Date.now(),
-          type: 'credit',
-          amount: addAmount,
-          description: 'Top-up via Corporate Card ••8882',
-          timestamp: 'Just now',
-        },
-        ...prev,
-      ]);
-      setAddingFunds(false);
+      const updatedTxs = await walletApi.getTransactions();
+      setTransactions(updatedTxs);
       setShowAddFundsModal(false);
-    }, 800);
+      setWalletNotice(`LKR ${addAmount.toFixed(2)} credited to your ledger.`);
+      setTimeout(() => setWalletNotice(null), 4000);
+    } catch (err: any) {
+      setWalletError(err.message || 'Top-up failed. Please try again.');
+    } finally {
+      setAddingFunds(false);
+    }
   };
 
   return (
-    <div className="flex flex-col w-full max-w-md mx-auto px-4 pb-24 font-sans">
+    <div className="flex flex-col w-full max-w-md mx-auto px-4 pb-28 font-sans">
+      {walletNotice && (
+        <div className="mt-2 p-3 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs font-semibold flex items-center gap-2">
+          <span className="material-symbols-outlined text-[18px]">check_circle</span>
+          <span>{walletNotice}</span>
+        </div>
+      )}
+      {walletError && (
+        <div className="mt-2 p-3 rounded-xl bg-error-container text-on-error-container text-xs font-semibold flex items-center gap-2">
+          <span className="material-symbols-outlined text-[18px]">error</span>
+          <span>{walletError}</span>
+        </div>
+      )}
       {/* 1. Available Balance Card */}
       <section className="py-2">
         <div className="relative overflow-hidden bg-primary p-6 rounded-3xl shadow-xl flex flex-col gap-3 text-on-primary border border-primary-container">
@@ -213,12 +257,33 @@ export const Wallet: React.FC = () => {
       <section className="my-2 flex flex-col gap-2">
         <div className="flex justify-between items-center px-1">
           <h2 className="text-xs font-bold text-on-surface uppercase tracking-wider">
-            Activity & Subsidies
+            Activity &amp; Subsidies
           </h2>
-          <span className="text-xs font-semibold text-primary cursor-pointer">DEFRA Verified</span>
+          <button
+            type="button"
+            onClick={refreshWallet}
+            className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[14px]">refresh</span>
+            <span>Sync Ledger</span>
+          </button>
         </div>
 
         <div className="flex flex-col gap-2">
+          {loadingWallet && transactions.length === 0 && (
+            <div className="p-4 text-center text-xs text-on-surface-variant bg-surface-container-low rounded-2xl">
+              Loading ledger entries...
+            </div>
+          )}
+          {!loadingWallet && transactions.length === 0 && (
+            <div className="p-5 text-center bg-surface-container-low rounded-2xl border border-outline-variant/20 space-y-2">
+              <span className="material-symbols-outlined text-[28px] text-outline">receipt_long</span>
+              <p className="text-xs font-semibold text-on-surface">No ledger transactions yet</p>
+              <p className="text-[11px] text-on-surface-variant">
+                Top up your commute wallet or share a carpool leg to record double-entry ledger activity.
+              </p>
+            </div>
+          )}
           {transactions.map((tx) => (
             <div
               key={tx.id}
